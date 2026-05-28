@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/
+.idea/
+dist/
+build/
+coverage/
+*.sql.bak
+insert_superadmin.sql
+cloudflared/*.json
+uploads/

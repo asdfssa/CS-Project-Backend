@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Journal Watch - Console Logs</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: #2d2d2d;
+            padding: 1rem;
+            border-bottom: 1px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #00ff88;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        select, button {
+            padding: 0.5rem 1rem;
+            border: 1px solid #555;
+            background: #3d3d3d;
+            color: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        select:hover, button:hover {
+            background: #4d4d3d;
+            border-color: #00ff88;
+        }
+
+        button.danger {
+            background: #dc3545;
+            border-color: #dc3545;
+        }
+
+        button.danger:hover {
+            background: #c82333;
+        }
+
+        .stats {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .stat-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .logs-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .log-entry {
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            border-left: 4px solid;
+            background: rgba(255, 255, 255, 0.05);
+            transition: background 0.3s;
+        }
+
+        .log-entry:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .log-entry.INFO {
+            border-left-color: #007bff;
+        }
+
+        .log-entry.OK {
+            border-left-color: #28a745;
+        }
+
+        .log-entry.WARN {
+            border-left-color: #ffc107;
+        }
+
+        .log-entry.ERROR {
+            border-left-color: #dc3545;
+        }
+
+        .log-timestamp {
+            color: #888;
+            font-size: 0.8rem;
+            margin-right: 1rem;
+        }
+
+        .log-level {
+            font-weight: bold;
+            margin-right: 1rem;
+            padding: 0.1rem 0.5rem;
+            border-radius: 3px;
+            font-size: 0.8rem;
+        }
+
+        .log-level.INFO {
+            background: #007bff;
+            color: #fff;
+        }
+
+        .log-level.OK {
+            background: #28a745;
+            color: #fff;
+        }
+
+        .log-level.WARN {
+            background: #ffc107;
+            color: #000;
+        }
+
+        .log-level.ERROR {
+            background: #dc3545;
+            color: #fff;
+        }
+
+        .log-message {
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .no-logs {
+            text-align: center;
+            color: #888;
+            margin-top: 2rem;
+        }
+
+        .auto-refresh {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .refresh-indicator {
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .loading {
+            text-align: center;
+            color: #888;
+            margin-top: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">📊 Console Logs</div>
+        <div class="controls">
+            <div class="filter-group">
+                <label for="levelFilter">Filter:</label>
+                <select id="levelFilter">
+                    <option value="ALL">All Levels</option>
+                    <option value="INFO">INFO</option>
+                    <option value="OK">OK</option>
+                    <option value="WARN">WARN</option>
+                    <option value="ERROR">ERROR</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="limitFilter">Limit:</label>
+                <select id="limitFilter">
+                    <option value="50">50</option>
+                    <option value="100" selected>100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                </select>
+            </div>
+            <button id="refreshBtn">🔄 Refresh</button>
+            <button id="clearBtn" class="danger">🗑️ Clear</button>
+            <div class="auto-refresh">
+                <input type="checkbox" id="autoRefresh" checked>
+                <label for="autoRefresh">Auto Refresh</label>
+                <div class="refresh-indicator"></div>
+            </div>
+        </div>
+        <div class="stats" id="stats">
+            <div class="stat-item">
+                <div class="stat-dot" style="background: #007bff;"></div>
+                <span id="infoCount">0</span> INFO
+            </div>
+            <div class="stat-item">
+                <div class="stat-dot" style="background: #28a745;"></div>
+                <span id="okCount">0</span> OK
+            </div>
+            <div class="stat-item">
+                <div class="stat-dot" style="background: #ffc107;"></div>
+                <span id="warnCount">0</span> WARN
+            </div>
+            <div class="stat-item">
+                <div class="stat-dot" style="background: #dc3545;"></div>
+                <span id="errorCount">0</span> ERROR
+            </div>
+        </div>
+    </div>
+
+    <div class="logs-container" id="logsContainer">
+        <div class="loading">Loading logs...</div>
+    </div>
+
+    <script>
+        let autoRefreshInterval;
+        
+        async function fetchLogs() {
+            try {
+                const level = document.getElementById('levelFilter').value;
+                const limit = document.getElementById('limitFilter').value;
+                
+                const response = await fetch(`/api/logs?level=${level}&limit=${limit}`);
+                const data = await response.json();
+                
+                displayLogs(data.logs);
+                await updateStats();
+            } catch (error) {
+                console.error('Error fetching logs:', error);
+                document.getElementById('logsContainer').innerHTML = 
+                    '<div class="no-logs">Error loading logs</div>';
+            }
+        }
+
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/logs/stats');
+                const stats = await response.json();
+                
+                document.getElementById('infoCount').textContent = stats.INFO;
+                document.getElementById('okCount').textContent = stats.OK;
+                document.getElementById('warnCount').textContent = stats.WARN;
+                document.getElementById('errorCount').textContent = stats.ERROR;
+            } catch (error) {
+                console.error('Error fetching stats:', error);
+            }
+        }
+
+        function displayLogs(logs) {
+            const container = document.getElementById('logsContainer');
+            
+            if (logs.length === 0) {
+                container.innerHTML = '<div class="no-logs">No logs found</div>';
+                return;
+            }
+
+            const logsHtml = logs.map(log => {
+                const date = new Date(log.timestamp);
+                const formattedTime = date.toLocaleString('th-TH', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                return `
+                    <div class="log-entry ${log.level}">
+                        <span class="log-timestamp">${formattedTime}</span>
+                        <span class="log-level ${log.level}">${log.level}</span>
+                        <span class="log-message">${escapeHtml(log.message)}</span>
+                    </div>
+                `;
+            }).join('');
+
+            container.innerHTML = logsHtml;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function clearLogs() {
+            try {
+                await fetch('/api/logs', { method: 'DELETE' });
+                await fetchLogs();
+            } catch (error) {
+                console.error('Error clearing logs:', error);
+            }
+        }
+
+        function startAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+            }
+            
+            if (document.getElementById('autoRefresh').checked) {
+                autoRefreshInterval = setInterval(fetchLogs, 2000);
+            }
+        }
+
+        // Event listeners
+        document.getElementById('refreshBtn').addEventListener('click', fetchLogs);
+        document.getElementById('clearBtn').addEventListener('click', clearLogs);
+        document.getElementById('levelFilter').addEventListener('change', fetchLogs);
+        document.getElementById('limitFilter').addEventListener('change', fetchLogs);
+        document.getElementById('autoRefresh').addEventListener('change', startAutoRefresh);
+
+        // Initial load
+        fetchLogs();
+        startAutoRefresh();
+    </script>
+</body>
+</html>
