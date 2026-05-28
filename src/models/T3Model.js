@@ -199,7 +199,7 @@ class T3Model {
     const row = await T3Model.findById(t3Id);
     if (!row) return null;
 
-    const now = new Date().toISOString();
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
 
     const applyReview = (slot) => {
       if (String(slot.user_id) === String(advisorId) && slot.status === 'Pending') {
@@ -250,7 +250,7 @@ class T3Model {
    * ถ้า reject  → overall = Rejected แจ้งกลับนิสิต
    */
   static async facultyReview(t3Id, action, meetingNo, meetingDate, remark) {
-    const now    = new Date().toISOString();
+    const now    = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const status = action === 'approve' ? 'Approved' : 'Rejected';
 
     const facultyComApproval = {
@@ -287,7 +287,7 @@ class T3Model {
    * @param {string|null} remark
    */
   static async gradSchoolReview(t3Id, action, approvedByEmail, remark) {
-    const now    = new Date().toISOString();
+    const now    = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const status = action === 'approve' ? 'Approved' : 'Rejected';
 
     const gradSchoolApproval = {

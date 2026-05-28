@@ -162,7 +162,7 @@ class PreT3Model {
     const row = await PreT3Model.findById(preT3Id);
     if (!row) return null;
 
-    const now = new Date().toISOString();
+    const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
     let advisorApproval    = row.advisor_approval;
     let co1Approval        = row.co_advisor_1_approval;
     let co2Approval        = row.co_advisor_2_approval;
@@ -233,7 +233,7 @@ class PreT3Model {
    * @param {string|null} remark
    */
   static async facultyReview(preT3Id, action, meetingNo, meetingDate, remark) {
-    const now    = new Date().toISOString();
+    const now    = new Date().toISOString().replace('T', ' ').slice(0, 19);
     const status = action === 'approve' ? 'Approved' : 'Rejected';
 
     const facultyComApproval = {
