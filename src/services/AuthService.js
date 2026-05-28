@@ -35,24 +35,24 @@ class AuthService {
     const user = await UserModel.findByUsername(username);
 
     if (!user) {
-      throw new AuthError('Invalid username or password', 'INVALID_CREDENTIALS', 401);
+      throw new AuthError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'INVALID_CREDENTIALS', 401);
     }
 
     if (!['Admin', 'SuperAdmin'].includes(user.role)) {
-      throw new AuthError('Invalid username or password', 'INVALID_CREDENTIALS', 401);
+      throw new AuthError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'INVALID_CREDENTIALS', 401);
     }
 
     if (user.account_status === 'Suspended') {
-      throw new AuthError('Account suspended', 'ACCOUNT_SUSPENDED', 403);
+      throw new AuthError('บัญชีนี้ถูกระงับการใช้งาน', 'ACCOUNT_SUSPENDED', 403);
     }
     if (user.account_status === 'Pending') {
-      throw new AuthError('Account pending approval', 'ACCOUNT_PENDING', 403);
+      throw new AuthError('บัญชีของคุณรอการอนุมัติจากผู้ดูแลระบบ', 'ACCOUNT_PENDING', 403);
     }
 
     if (UserModel.isLocked(user)) {
       const minutesLeft = Math.ceil((new Date(user.locked_until) - new Date()) / 60000);
       throw new AuthError(
-        `Account locked. Try again in ${minutesLeft} minutes`,
+        `บัญชีถูกล็อคชั่วคราว กรุณารออีก ${minutesLeft} นาทีแล้วลองใหม่`,
         'ACCOUNT_LOCKED',
         423
       );
@@ -75,7 +75,7 @@ class AuthService {
         ipAddress,
         userAgent,
       });
-      throw new AuthError('Invalid username or password', 'INVALID_CREDENTIALS', 401);
+      throw new AuthError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'INVALID_CREDENTIALS', 401);
     }
 
     await this._issueOtpForUser(user, ipAddress, userAgent);
@@ -104,17 +104,17 @@ class AuthService {
   static async verifyOtp({ userId, otpCode, ipAddress, userAgent }) {
     const user = await UserModel.findById(userId);
     if (!user) {
-      throw new AuthError('User not found', 'USER_NOT_FOUND', 404);
+      throw new AuthError('ไม่พบบัญชีผู้ใช้ในระบบ', 'USER_NOT_FOUND', 404);
     }
 
     const activeOtp = await OtpModel.findActive(userId, 'login_2fa');
     if (!activeOtp) {
-      throw new AuthError('OTP expired or not found. Please login again', 'OTP_EXPIRED', 400);
+      throw new AuthError('OTP หมดอายุหรือไม่พบในระบบ กรุณาเข้าสู่ระบบใหม่', 'OTP_EXPIRED', 400);
     }
 
     if (activeOtp.attempt_count >= config.otp.maxAttempts) {
       await OtpModel.markAsUsed(activeOtp.otp_id);
-      throw new AuthError('OTP attempts exceeded. Please login again', 'OTP_MAX_ATTEMPTS', 429);
+      throw new AuthError('ป้อน OTP เกินจำนวนครั้ง กรุณาเข้าสู่ระบบใหม่', 'OTP_MAX_ATTEMPTS', 429);
     }
 
     const isValid = cryptoUtil.compareOtpHash(otpCode, activeOtp.otp_hash);
@@ -130,7 +130,7 @@ class AuthService {
         userAgent,
       });
       const attemptsLeft = config.otp.maxAttempts - (activeOtp.attempt_count + 1);
-      throw new AuthError(`Invalid OTP. ${attemptsLeft} attempt(s) left`, 'OTP_INVALID', 400);
+      throw new AuthError(`OTP ไม่ถูกต้อง เหลืออีก ${attemptsLeft} ครั้ง`, 'OTP_INVALID', 400);
     }
 
     await OtpModel.markAsUsed(activeOtp.otp_id);
@@ -175,7 +175,7 @@ class AuthService {
   static async resendOtp({ userId, ipAddress, userAgent }) {
     const user = await UserModel.findById(userId);
     if (!user) {
-      throw new AuthError('User not found', 'USER_NOT_FOUND', 404);
+      throw new AuthError('ไม่พบบัญชีผู้ใช้ในระบบ', 'USER_NOT_FOUND', 404);
     }
     await this._issueOtpForUser(user, ipAddress, userAgent);
     return {
@@ -196,20 +196,20 @@ class AuthService {
       });
       payload = ticket.getPayload();
     } catch (err) {
-      throw new AuthError('Invalid Google token', 'INVALID_GOOGLE_TOKEN', 401);
+      throw new AuthError('Google Token ไม่ถูกต้อง', 'INVALID_GOOGLE_TOKEN', 401);
     }
 
     const email = payload.email;
     const emailVerified = payload.email_verified;
 
     if (!emailVerified) {
-      throw new AuthError('Google email not verified', 'EMAIL_NOT_VERIFIED', 401);
+      throw new AuthError('อีเมล Google ยังไม่ได้รับการยืนยัน', 'EMAIL_NOT_VERIFIED', 401);
     }
 
     const domain = email.split('@')[1];
     if (domain !== config.google.allowedDomain && domain !== 'gmail.com') {
       throw new AuthError(
-        `Only @${config.google.allowedDomain} accounts are allowed`,
+        `อนุญาตเฉพาะอีเมล @${config.google.allowedDomain} เท่านั้น`,
         'INVALID_DOMAIN',
         403
       );
@@ -225,7 +225,7 @@ class AuthService {
     }
 
     if (user.account_status === 'Suspended') {
-      throw new AuthError('Account suspended', 'ACCOUNT_SUSPENDED', 403);
+      throw new AuthError('บัญชีนี้ถูกระงับการใช้งาน', 'ACCOUNT_SUSPENDED', 403);
     }
     if (user.account_status === 'Pending') {
       throw new AuthError(
@@ -237,7 +237,7 @@ class AuthService {
 
     if (['Admin', 'SuperAdmin'].includes(user.role)) {
       throw new AuthError(
-        'Admin accounts must use the admin login page',
+        'บัญชี Admin ต้องเข้าสู่ระบบผ่านหน้า Admin Login',
         'USE_ADMIN_LOGIN',
         403
       );
@@ -286,20 +286,20 @@ class AuthService {
    */
   static async refreshToken({ refreshToken, ipAddress, userAgent }) {
     if (!refreshToken) {
-      throw new AuthError('Refresh token required', 'NO_REFRESH_TOKEN', 401);
+      throw new AuthError('ไม่พบ Refresh Token กรุณาเข้าสู่ระบบใหม่', 'NO_REFRESH_TOKEN', 401);
     }
 
     const tokenHash = jwtUtil.hashRefreshToken(refreshToken);
     const stored = await RefreshTokenModel.findByHash(tokenHash);
 
     if (!stored) {
-      throw new AuthError('Invalid or expired refresh token', 'INVALID_REFRESH_TOKEN', 401);
+      throw new AuthError('Refresh Token ไม่ถูกต้องหรือหมดอายุ', 'INVALID_REFRESH_TOKEN', 401);
     }
 
     const user = await UserModel.findById(stored.user_id);
     if (!user || user.account_status !== 'Active') {
       await RefreshTokenModel.revokeByHash(tokenHash);
-      throw new AuthError('Account unavailable', 'ACCOUNT_UNAVAILABLE', 401);
+      throw new AuthError('บัญชีนี้ไม่สามารถใช้งานได้ในขณะนี้', 'ACCOUNT_UNAVAILABLE', 401);
     }
 
     // Rotate: revoke token เก่า ออก token ใหม่
@@ -374,12 +374,12 @@ class AuthService {
       });
       payload = ticket.getPayload();
     } catch (err) {
-      throw new AuthError('Invalid Google token', 'INVALID_GOOGLE_TOKEN', 401);
+      throw new AuthError('Google Token ไม่ถูกต้อง', 'INVALID_GOOGLE_TOKEN', 401);
     }
 
     const email = payload.email;
     if (!payload.email_verified) {
-      throw new AuthError('Google email not verified', 'EMAIL_NOT_VERIFIED', 401);
+      throw new AuthError('อีเมล Google ยังไม่ได้รับการยืนยัน', 'EMAIL_NOT_VERIFIED', 401);
     }
 
     // เช็ค domain

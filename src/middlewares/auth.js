@@ -18,7 +18,7 @@ function requireAuth(req, res, next) {
     return res.status(401).json({
       success: false,
       code: 'NO_TOKEN',
-      message: 'Authentication required',
+      message: 'กรุณา login ก่อนเข้าใช้งาน',
     });
   }
   try {
@@ -27,7 +27,7 @@ function requireAuth(req, res, next) {
       return res.status(401).json({
         success: false,
         code: 'WRONG_TOKEN_TYPE',
-        message: 'Invalid token type',
+        message: 'ประเภท Token ไม่ถูกต้อง',
       });
     }
     req.user = payload;
@@ -36,7 +36,7 @@ function requireAuth(req, res, next) {
     return res.status(401).json({
       success: false,
       code: 'INVALID_TOKEN',
-      message: 'Invalid or expired token',
+      message: 'Token ไม่ถูกต้องหรือหมดอายุ กรุณา login ใหม่',
     });
   }
 }
@@ -47,7 +47,7 @@ function requireOtpToken(req, res, next) {
     return res.status(401).json({
       success: false,
       code: 'NO_OTP_TOKEN',
-      message: 'OTP token required',
+      message: 'กรุณาระบุ OTP Token',
     });
   }
   try {
@@ -56,7 +56,7 @@ function requireOtpToken(req, res, next) {
       return res.status(401).json({
         success: false,
         code: 'WRONG_TOKEN_TYPE',
-        message: 'Invalid token type',
+        message: 'ประเภท Token ไม่ถูกต้อง',
       });
     }
     req.otpUserId = payload.sub;
@@ -65,7 +65,7 @@ function requireOtpToken(req, res, next) {
     return res.status(401).json({
       success: false,
       code: 'OTP_TOKEN_EXPIRED',
-      message: 'OTP session expired. Please login again',
+      message: 'OTP หมดอายุ กรุณาเข้าสู่ระบบใหม่',
     });
   }
 }
@@ -76,7 +76,7 @@ function requireRole(...allowedRoles) {
       return res.status(403).json({
         success: false,
         code: 'FORBIDDEN',
-        message: 'Insufficient permissions',
+        message: 'คุณไม่มีสิทธิ์เข้าถึง endpoint นี้',
       });
     }
     next();

@@ -29,7 +29,7 @@ const loginLimiter = rateLimit({
   message: {
     success: false,
     code: 'RATE_LIMIT',
-    message: 'Too many login attempts. Try again in 15 minutes',
+    message: 'เข้าสู่ระบบเกินจำนวนครั้งที่กำหนด กรุณารอ 15 นาทีแล้วลองใหม่',
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -43,7 +43,7 @@ const googleLimiter = rateLimit({
   message: {
     success: false,
     code: 'RATE_LIMIT',
-    message: 'Too many login attempts. Try again in 15 minutes',
+    message: 'เข้าสู่ระบบเกินจำนวนครั้งที่กำหนด กรุณารอ 15 นาทีแล้วลองใหม่',
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -57,7 +57,7 @@ const otpLimiter = rateLimit({
   message: {
     success: false,
     code: 'RATE_LIMIT',
-    message: 'Too many OTP attempts. Try again later',
+    message: 'ป้อน OTP เกินจำนวนครั้งที่กำหนด กรุณารอแล้วลองใหม่',
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -71,7 +71,7 @@ const registerLimiter = rateLimit({
   message: {
     success: false,
     code: 'RATE_LIMIT',
-    message: 'Too many register attempts. Try again in 15 minutes',
+    message: 'ลงทะเบียนเกินจำนวนครั้งที่กำหนด กรุณารอ 15 นาทีแล้วลองใหม่',
   },
   standardHeaders: true,
   legacyHeaders: false,

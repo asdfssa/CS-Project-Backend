@@ -10,7 +10,7 @@ function handleValidation(req, res, next) {
     return res.status(400).json({
       success: false,
       code: 'VALIDATION_ERROR',
-      message: 'Invalid input',
+      message: 'ข้อมูลที่ส่งมาไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่',
       errors: errors.array().map((e) => ({ field: e.path, message: e.msg })),
     });
   }
