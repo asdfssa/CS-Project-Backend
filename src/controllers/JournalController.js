@@ -7,6 +7,7 @@ const TCIService = require('../services/TCIService');
 const ScopusScraper = require('../services/ScopusScraper');
 const TCIScraper = require('../services/TCIScraper');
 const scopusProxy = require('../services/ScopusProxyService');
+const { serverError } = require('../utils/errorResponse');
 
 class JournalController {
 

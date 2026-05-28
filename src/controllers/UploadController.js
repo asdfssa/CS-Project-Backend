@@ -11,6 +11,7 @@ const path = require('path');
 const fs   = require('fs');
 const db   = require('../config/database');
 const T3Model = require('../models/T3Model');
+const { serverError } = require('../utils/errorResponse');
 
 // map field name → key ใน journal_evidence_files JSON
 const FIELD_TO_KEY = {
@@ -91,9 +92,8 @@ class UploadController {
         data: { uploaded },
       });
     } catch (err) {
-      console.error('[UploadController.uploadFiles]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
-    }
+      return serverError(res, err, 'UploadController.uploadFiles');
+  }
   }
 
   // ============================================================
@@ -148,9 +148,8 @@ class UploadController {
 
       return res.json({ success: true, message: 'ลบไฟล์เรียบร้อย' });
     } catch (err) {
-      console.error('[UploadController.deleteFile]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
-    }
+      return serverError(res, err, 'UploadController.deleteFile');
+  }
   }
 
   // ============================================================
@@ -204,9 +203,8 @@ class UploadController {
 
       res.sendFile(filePath);
     } catch (err) {
-      console.error('[UploadController.downloadFile]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
-    }
+      return serverError(res, err, 'UploadController.downloadFile');
+  }
   }
 }
 

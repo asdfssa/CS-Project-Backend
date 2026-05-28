@@ -16,6 +16,7 @@ const PreT3Model  = require('../models/PreT3Model');
 const UserModel   = require('../models/UserModel');
 const MailService = require('../services/MailService');
 const db          = require('../config/database');
+const { serverError } = require('../utils/errorResponse');
 
 class T3Controller {
   // ============================================================
@@ -154,8 +155,7 @@ class T3Controller {
         data: { t3_id: t3Id },
       });
     } catch (err) {
-      console.error('[T3Controller.submit]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'T3Controller.submit');
     }
   }
 
@@ -173,8 +173,7 @@ class T3Controller {
         data: rows.map(r => T3Controller._formatRow(r)),
       });
     } catch (err) {
-      console.error('[T3Controller.getMyRequests]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'T3Controller.getMyRequests');
     }
   }
 
@@ -199,8 +198,7 @@ class T3Controller {
         data: rows.map(r => T3Controller._formatRow(r)),
       });
     } catch (err) {
-      console.error('[T3Controller.getPending]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'T3Controller.getPending');
     }
   }
 
@@ -235,8 +233,7 @@ class T3Controller {
 
       return res.json({ success: true, data: T3Controller._formatRow(row) });
     } catch (err) {
-      console.error('[T3Controller.getById]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'T3Controller.getById');
     }
   }
 
@@ -305,8 +302,7 @@ class T3Controller {
         data: { overall_status: result.newOverallStatus, all_advisor_approved: result.allApproved },
       });
     } catch (err) {
-      console.error('[T3Controller.advisorReview]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'T3Controller.advisorReview');
     }
   }
 
@@ -375,8 +371,7 @@ class T3Controller {
         data: { overall_status: result.newOverallStatus },
       });
     } catch (err) {
-      console.error('[T3Controller.facultyReview]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'T3Controller.facultyReview');
     }
   }
 
@@ -428,8 +423,7 @@ class T3Controller {
         data: { overall_status: result.newOverallStatus },
       });
     } catch (err) {
-      console.error('[T3Controller.gradSchoolReview]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'T3Controller.gradSchoolReview');
     }
   }
 
@@ -461,8 +455,7 @@ class T3Controller {
 
       return res.json({ success: true, message: 'ยกเลิก T3 เรียบร้อยแล้ว' });
     } catch (err) {
-      console.error('[T3Controller.cancel]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'T3Controller.cancel');
     }
   }
 

@@ -9,6 +9,7 @@
  */
 const db        = require('../config/database');
 const UserModel = require('../models/UserModel');
+const { serverError } = require('../utils/errorResponse');
 
 class UserController {
 

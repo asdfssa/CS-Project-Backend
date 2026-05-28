@@ -15,6 +15,7 @@ const PreT3Model  = require('../models/PreT3Model');
 const UserModel   = require('../models/UserModel');
 const MailService = require('../services/MailService');
 const db          = require('../config/database');
+const { serverError } = require('../utils/errorResponse');
 
 class PreT3Controller {
   // ============================================================
@@ -174,8 +175,7 @@ class PreT3Controller {
         data: { pre_t3_id: preT3Id },
       });
     } catch (err) {
-      console.error('[PreT3Controller.submit]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'PreT3Controller.submit');
     }
   }
 
@@ -193,8 +193,7 @@ class PreT3Controller {
         data: rows.map(r => PreT3Controller._formatRow(r)),
       });
     } catch (err) {
-      console.error('[PreT3Controller.getMyRequests]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'PreT3Controller.getMyRequests');
     }
   }
 
@@ -220,8 +219,7 @@ class PreT3Controller {
         data: rows.map(r => PreT3Controller._formatRow(r)),
       });
     } catch (err) {
-      console.error('[PreT3Controller.getPending]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'PreT3Controller.getPending');
     }
   }
 
@@ -260,8 +258,7 @@ class PreT3Controller {
 
       return res.json({ success: true, data: PreT3Controller._formatRow(row) });
     } catch (err) {
-      console.error('[PreT3Controller.getById]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'PreT3Controller.getById');
     }
   }
 
@@ -331,8 +328,7 @@ class PreT3Controller {
         data: { overall_status: result.newOverallStatus, all_advisor_approved: result.allApproved },
       });
     } catch (err) {
-      console.error('[PreT3Controller.advisorReview]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'PreT3Controller.advisorReview');
     }
   }
 
@@ -394,8 +390,7 @@ class PreT3Controller {
         data: { overall_status: result.newOverallStatus },
       });
     } catch (err) {
-      console.error('[PreT3Controller.facultyReview]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'PreT3Controller.facultyReview');
     }
   }
 
@@ -457,8 +452,7 @@ class PreT3Controller {
 
       return res.json({ success: true, message: 'ยื่น Pre-T3 ซ้ำเรียบร้อย กรุณารอการอนุมัติ' });
     } catch (err) {
-      console.error('[PreT3Controller.resubmit]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'PreT3Controller.resubmit');
     }
   }
 
@@ -490,8 +484,7 @@ class PreT3Controller {
 
       return res.json({ success: true, message: 'ยกเลิก Pre-T3 เรียบร้อยแล้ว' });
     } catch (err) {
-      console.error('[PreT3Controller.cancel]', err);
-      return res.status(500).json({ success: false, code: 'SERVER_ERROR', message: err.message });
+      return serverError(res, err, 'PreT3Controller.cancel');
     }
   }
 

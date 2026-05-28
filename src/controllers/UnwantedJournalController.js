@@ -6,6 +6,7 @@
 const db = require('../config/database');
 const multer = require('multer');
 const { parse } = require('csv-parse/sync');
+const { serverError } = require('../utils/errorResponse');
 
 class UnwantedJournalController {
 

@@ -10,6 +10,7 @@
  *   PATCH /api/bug-reports/:id/status   → Admin อัปเดต status
  */
 const BugReportModel = require('../models/BugReportModel');
+const { serverError } = require('../utils/errorResponse');
 
 const VALID_CATEGORIES = ['scraper', 'form', 'auth', 'notification', 'other'];
 const VALID_STATUSES   = ['open', 'in_progress', 'resolved', 'wontfix'];
