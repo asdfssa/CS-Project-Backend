@@ -134,7 +134,8 @@ class T3Model {
               created_at, updated_at
          FROM journal_watch.t3_requests
         WHERE student_id = ?
-        ORDER BY created_at DESC`,
+        ORDER BY created_at DESC
+        LIMIT 100`,
       [studentId]
     );
     return rows;

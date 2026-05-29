@@ -24,11 +24,12 @@ class RefreshTokenModel {
    */
   static async findByHash(tokenHash) {
     const [rows] = await db.query(
-      `SELECT * FROM journal_watch.refresh_tokens
-       WHERE token_hash = ?
-         AND revoked_at IS NULL
-         AND expires_at > NOW()
-       LIMIT 1`,
+      `SELECT token_id, user_id, token_hash, expires_at, ip_address, user_agent, created_at
+         FROM journal_watch.refresh_tokens
+        WHERE token_hash = ?
+          AND revoked_at IS NULL
+          AND expires_at > NOW()
+        LIMIT 1`,
       [tokenHash]
     );
     return rows[0] || null;

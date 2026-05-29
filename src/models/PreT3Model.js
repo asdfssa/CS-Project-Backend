@@ -91,7 +91,8 @@ class PreT3Model {
               created_at, updated_at
          FROM journal_watch.pre_t3_requests
         WHERE student_id = ?
-        ORDER BY created_at DESC`,
+        ORDER BY created_at DESC
+        LIMIT 100`,
       [studentId]
     );
     return rows;
@@ -112,14 +113,9 @@ class PreT3Model {
          JOIN journal_watch.users u ON u.user_id = p.student_id
         WHERE p.overall_status = 'Pending'
           AND (
-            JSON_UNQUOTE(JSON_EXTRACT(p.advisor_approval,       '$.user_id')) = ?
-              AND JSON_UNQUOTE(JSON_EXTRACT(p.advisor_approval, '$.status'))  = 'Pending'
-          OR
-            JSON_UNQUOTE(JSON_EXTRACT(p.co_advisor_1_approval,  '$.user_id')) = ?
-              AND JSON_UNQUOTE(JSON_EXTRACT(p.co_advisor_1_approval, '$.status')) = 'Pending'
-          OR
-            JSON_UNQUOTE(JSON_EXTRACT(p.co_advisor_2_approval,  '$.user_id')) = ?
-              AND JSON_UNQUOTE(JSON_EXTRACT(p.co_advisor_2_approval, '$.status')) = 'Pending'
+            (p.adv_user_id = ? AND p.adv_status = 'Pending')
+            OR (p.co1_user_id = ? AND p.co1_status = 'Pending')
+            OR (p.co2_user_id = ? AND p.co2_status = 'Pending')
           )
         ORDER BY p.created_at ASC`,
       [advisorId, advisorId, advisorId]
@@ -141,10 +137,9 @@ class PreT3Model {
          FROM journal_watch.pre_t3_requests p
          JOIN journal_watch.users u ON u.user_id = p.student_id
         WHERE p.overall_status = 'Pending'
-          AND JSON_UNQUOTE(JSON_EXTRACT(p.advisor_approval,     '$.status')) = 'Approved'
-          AND JSON_UNQUOTE(JSON_EXTRACT(p.faculty_com_approval, '$.status')) = 'Pending'
-        ORDER BY p.created_at ASC`,
-      []
+          AND p.adv_status     = 'Approved'
+          AND p.faculty_status = 'Pending'
+        ORDER BY p.created_at ASC`
     );
     return rows;
   }
