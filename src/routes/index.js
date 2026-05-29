@@ -6,6 +6,7 @@ const express = require('express');
 const authRoutes = require('./authRoutes');
 const journalRoutes = require('./journalRoutes');
 const adminRoutes = require('./adminRoutes');
+const userManageRoutes = require('./userManageRoutes');
 const { router: logRoutes } = require('./logRoutes');
 
 const router = express.Router();
@@ -25,6 +26,7 @@ router.get('/health', (req, res) => {
 router.use('/auth', authRoutes);
 router.use('/journal', journalRoutes);
 router.use('/admin', adminRoutes);
+router.use('/manage/users', userManageRoutes);
 
 router.use('/unwanted-journals', unwantedJournalRoutes);
 router.use('/pre-t3', preT3Routes);

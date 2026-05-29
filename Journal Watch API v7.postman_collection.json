@@ -521,6 +521,7 @@
     },
     {
       "name": "👑 Admin",
+      "description": "เฉพาะ Admin / SuperAdmin เท่านั้น",
       "item": [
         {
           "name": "1. Get Stats",
@@ -534,115 +535,97 @@
             ],
             "url": {
               "raw": "{{base_url}}/admin/stats",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "stats"
-              ]
+              "host": ["{{base_url}}"],
+              "path": ["admin", "stats"]
             }
           },
           "response": []
         },
         {
-          "name": "2. Get Users",
+          "name": "2. System Logs",
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{access_token}}",
+                "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/admin/users?page=1&limit=20",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "users"
-              ],
+              "raw": "{{base_url}}/admin/logs?page=1&limit=50&user_id&action&target_type&target_id&date_from&date_to",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "logs"],
               "query": [
-                {
-                  "key": "role",
-                  "value": "",
-                  "description": "Student | Supervisor | Program_Chair | Staff",
-                  "disabled": true
-                },
-                {
-                  "key": "status",
-                  "value": "",
-                  "description": "Pending | Active | Suspended",
-                  "disabled": true
-                },
-                {
-                  "key": "search",
-                  "value": "",
-                  "description": "ค้นหาชื่อ/อีเมล",
-                  "disabled": true
-                },
-                {
-                  "key": "page",
-                  "value": "1"
-                },
-                {
-                  "key": "limit",
-                  "value": "20"
-                }
+                { "key": "page",        "value": "1",   "type": "text" },
+                { "key": "limit",       "value": "50",  "type": "text" },
+                { "key": "user_id",     "value": null,  "type": "text" },
+                { "key": "action",      "value": null,  "type": "text" },
+                { "key": "target_type", "value": null,  "type": "text" },
+                { "key": "target_id",   "value": null,  "type": "text" },
+                { "key": "date_from",   "value": null,  "type": "text" },
+                { "key": "date_to",     "value": null,  "type": "text" }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "👥 จัดการผู้ใช้ (Admin + Staff)",
+      "description": "Admin, SuperAdmin, Staff เข้าได้ — base path: /api/manage/users",
+      "item": [
+        {
+          "name": "1. Get Users",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/manage/users?page=1&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["manage", "users"],
+              "query": [
+                { "key": "role",   "value": "", "description": "Student | Supervisor | Program_Chair | Staff", "disabled": true },
+                { "key": "status", "value": "", "description": "Pending | Active | Suspended", "disabled": true },
+                { "key": "search", "value": "", "description": "ค้นหาชื่อ/อีเมล", "disabled": true },
+                { "key": "page",   "value": "1" },
+                { "key": "limit",  "value": "20" }
               ]
             }
           },
           "response": []
         },
         {
-          "name": "3. Create User (Single)",
+          "name": "2. Create User (Single)",
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"role\": \"Student\",\n  \"first_name\": \"สมชาย\",\n  \"last_name\": \"ใจดี\",\n  \"msu_mail\": \"somchai@gmail.com\",\n  \"prefix\": \"นาย\",\n  \"phone\": \"0812345678\",\n  \"degree_level\": \"Master\",\n  \"curriculum_year\": \"2566\",\n  \"study_plan_code\": \"Master_A1\",\n  \"advisor_major_mail\": \"\",\n  \"advisor_co1_mail\": \"\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
+              "options": { "raw": { "language": "json" } }
             },
             "url": {
-              "raw": "{{base_url}}/admin/users/single",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "users",
-                "single"
-              ]
+              "raw": "{{base_url}}/manage/users/single",
+              "host": ["{{base_url}}"],
+              "path": ["manage", "users", "single"]
             },
             "description": "role: Student | Supervisor | Program_Chair\ndegree_level: Master | Doctoral\ncurriculum_year: 2560 | 2566\nstudy_plan_code: Master_A1 | Master_A2 | Master_B | Master_P1A1 | Master_P1A2 | Master_P2B | Doc_1_1 | Doc_1_2 | Doc_2_1 | Doc_2_2 | Doc_P1_1_1 | Doc_P1_1_2 | Doc_P2_2_1 | Doc_P2_2_2"
           },
           "response": []
         },
         {
-          "name": "4. Import Users (Bulk CSV)",
+          "name": "3. Import Users (Bulk CSV)",
           "request": {
             "method": "POST",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
             ],
             "body": {
               "mode": "formdata",
@@ -656,228 +639,101 @@
               ]
             },
             "url": {
-              "raw": "{{base_url}}/admin/users/import",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "users",
-                "import"
-              ]
+              "raw": "{{base_url}}/manage/users/import",
+              "host": ["{{base_url}}"],
+              "path": ["manage", "users", "import"]
             },
             "description": "CSV Header ที่ถูกต้อง:\nrole,first_name,last_name,msu_mail,prefix,degree_level,curriculum_year,study_plan_code\n\nตัวอย่าง:\nStudent,สมชาย,ใจดี,somchai@gmail.com,นาย,Master,2566,Master_A1\nSupervisor,อาจารย์,สอนดี,teacher@gmail.com,ผศ.ดร.,,,"
           },
           "response": []
         },
         {
-          "name": "5. Approve User (Pending → Active)",
+          "name": "4. Approve User (Pending → Active)",
           "request": {
             "method": "PATCH",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
             ],
             "url": {
-              "raw": "{{base_url}}/admin/users/1/approve",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "users",
-                "1",
-                "approve"
-              ]
+              "raw": "{{base_url}}/manage/users/1/approve",
+              "host": ["{{base_url}}"],
+              "path": ["manage", "users", "1", "approve"]
             },
             "description": "เปลี่ยน Pending → Active\nเปลี่ยน :1 เป็น user_id จริง"
           },
           "response": []
         },
         {
-          "name": "6. Suspend User (→ Suspended)",
+          "name": "5. Suspend User (→ Suspended)",
           "request": {
             "method": "PATCH",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
             ],
             "url": {
-              "raw": "{{base_url}}/admin/users/1/suspend",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "users",
-                "1",
-                "suspend"
-              ]
+              "raw": "{{base_url}}/manage/users/1/suspend",
+              "host": ["{{base_url}}"],
+              "path": ["manage", "users", "1", "suspend"]
             },
             "description": "ระงับบัญชี — ไม่สามารถระงับ Admin/SuperAdmin ได้"
           },
           "response": []
         },
         {
-          "name": "7. Activate User (Suspended → Active)",
+          "name": "6. Activate User (Suspended → Active)",
           "request": {
             "method": "PATCH",
             "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
             ],
             "url": {
-              "raw": "{{base_url}}/admin/users/1/activate",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "users",
-                "1",
-                "activate"
-              ]
+              "raw": "{{base_url}}/manage/users/1/activate",
+              "host": ["{{base_url}}"],
+              "path": ["manage", "users", "1", "activate"]
             },
             "description": "คืนสถานะจาก Suspended → Active เท่านั้น"
           },
           "response": []
         },
         {
-          "name": "8. Update Advisors",
+          "name": "7. Update Advisors",
           "request": {
             "method": "PATCH",
             "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"advisor_major_mail\": \"lukashirinh17@gmail.com\",\n  \"advisor_co1_mail\": \"advisor002@msu.ac.th\",\n  \"advisor_co2_mail\": \"\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/admin/users/55/advisors",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "users",
-                "55",
-                "advisors"
-              ]
+              "raw": "{{base_url}}/manage/users/55/advisors",
+              "host": ["{{base_url}}"],
+              "path": ["manage", "users", "55", "advisors"]
             },
             "description": "รับ email ของ Supervisor (ไม่ใช่ ID)\nadvisor_type: Major | Co_1 | Co_2\nจะ DELETE assignments เดิมทั้งหมดก่อน แล้ว INSERT ใหม่"
           },
           "response": []
         },
         {
-          "name": "9. Update User",
+          "name": "8. Update User",
           "request": {
             "method": "PATCH",
             "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}"
-              }
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"prefix\": \"นาย\",\n  \"first_name\": \"สมชาย แก้ไข\",\n  \"last_name\": \"ใจดีมาก\",\n  \"msu_mail\": \"somchai@gmail.com\",\n  \"phone\": \"0812345678\",\n  \"facebook_id\": \"\",\n  \"line_id\": \"\",\n  \"degree_level\": \"Master\",\n  \"curriculum_year\": \"2566\",\n  \"study_plan_code\": \"Master_A1\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/admin/users/1",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "users",
-                "1"
-              ]
+              "raw": "{{base_url}}/manage/users/1",
+              "host": ["{{base_url}}"],
+              "path": ["manage", "users", "1"]
             },
             "description": "degree_level: Master | Doctoral\ncurriculum_year: 2560 | 2566\nstudy_plan_code: Master_A1 | Master_A2 | Master_B | Master_P1A1 | Master_P1A2 | Master_P2B | Doc_1_1 | Doc_1_2 | Doc_2_1 | Doc_2_2 | Doc_P1_1_1 | Doc_P1_1_2 | Doc_P2_2_1 | Doc_P2_2_2\n\nไม่รับ role (เปลี่ยน role ผ่าน endpoint อื่น)"
-          },
-          "response": []
-        },
-        {
-          "name": "System logs",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}",
-                "type": "text"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/admin/logs?page=1&limit=50&user_id&action&target_type&target_id&date_from&date_to",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "admin",
-                "logs"
-              ],
-              "query": [
-                {
-                  "key": "page",
-                  "value": "1",
-                  "type": "text"
-                },
-                {
-                  "key": "limit",
-                  "value": "50",
-                  "type": "text"
-                },
-                {
-                  "key": "user_id",
-                  "value": null,
-                  "type": "text"
-                },
-                {
-                  "key": "action",
-                  "value": null,
-                  "type": "text"
-                },
-                {
-                  "key": "target_type",
-                  "value": null,
-                  "type": "text"
-                },
-                {
-                  "key": "target_id",
-                  "value": null,
-                  "type": "text"
-                },
-                {
-                  "key": "date_from",
-                  "value": null,
-                  "type": "text"
-                },
-                {
-                  "key": "date_to",
-                  "value": null,
-                  "type": "text"
-                }
-              ]
-            }
           },
           "response": []
         }
