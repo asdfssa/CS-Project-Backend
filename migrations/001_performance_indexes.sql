@@ -1,10 +1,12 @@
 -- Migration 001: Performance indexes + generated columns for JSON approval fields
 -- Run once against the journal_watch database.
 -- Safe to run on empty or existing data.
+--
+-- วิธีรัน: เลือกทีละ ALTER TABLE แล้วกด Ctrl+Enter (Execute Statement)
+-- หรือกด F5 (Execute Script) เพื่อรันทั้งไฟล์พร้อมกัน
 
 -- ============================================================
--- t3_requests: Generated columns for JSON approval fields
--- Allows indexed lookups instead of JSON_EXTRACT table scans
+-- t3_requests: Generated columns + indexes รวมใน statement เดียว
 -- ============================================================
 ALTER TABLE journal_watch.t3_requests
   ADD COLUMN adv_user_id    INT UNSIGNED GENERATED ALWAYS AS
@@ -20,38 +22,42 @@ ALTER TABLE journal_watch.t3_requests
   ADD COLUMN co2_status     VARCHAR(20)  GENERATED ALWAYS AS
     (JSON_UNQUOTE(JSON_EXTRACT(co_advisor_2_approval,      '$.status'))) STORED,
   ADD COLUMN faculty_status VARCHAR(20)  GENERATED ALWAYS AS
-    (JSON_UNQUOTE(JSON_EXTRACT(faculty_com_approval,       '$.status'))) STORED;
-
--- Composite indexes for advisor pending queries
-CREATE INDEX idx_t3_adv_user_status ON journal_watch.t3_requests(adv_user_id,  adv_status);
-CREATE INDEX idx_t3_co1_user_status ON journal_watch.t3_requests(co1_user_id,  co1_status);
-CREATE INDEX idx_t3_co2_user_status ON journal_watch.t3_requests(co2_user_id,  co2_status);
-CREATE INDEX idx_t3_faculty_status  ON journal_watch.t3_requests(faculty_status);
-CREATE INDEX idx_t3_overall_status  ON journal_watch.t3_requests(overall_status);
-CREATE INDEX idx_t3_student_id      ON journal_watch.t3_requests(student_id);
+    (JSON_UNQUOTE(JSON_EXTRACT(faculty_com_approval,       '$.status'))) STORED,
+  ADD INDEX idx_t3_adv_user_status (adv_user_id,  adv_status),
+  ADD INDEX idx_t3_co1_user_status (co1_user_id,  co1_status),
+  ADD INDEX idx_t3_co2_user_status (co2_user_id,  co2_status),
+  ADD INDEX idx_t3_faculty_status  (faculty_status),
+  ADD INDEX idx_t3_overall_status  (overall_status),
+  ADD INDEX idx_t3_student_id      (student_id);
 
 -- ============================================================
 -- users
 -- ============================================================
-CREATE INDEX idx_users_msu_mail       ON journal_watch.users(msu_mail);
-CREATE INDEX idx_users_deleted_at     ON journal_watch.users(deleted_at);
-CREATE INDEX idx_users_account_status ON journal_watch.users(account_status);
-CREATE INDEX idx_users_role           ON journal_watch.users(role);
+ALTER TABLE journal_watch.users
+  ADD INDEX idx_users_msu_mail       (msu_mail),
+  ADD INDEX idx_users_deleted_at     (deleted_at),
+  ADD INDEX idx_users_account_status (account_status),
+  ADD INDEX idx_users_role           (role);
 
 -- ============================================================
 -- pre_t3_requests
 -- ============================================================
-CREATE INDEX idx_pre_t3_student_id     ON journal_watch.pre_t3_requests(student_id);
-CREATE INDEX idx_pre_t3_overall_status ON journal_watch.pre_t3_requests(overall_status);
+ALTER TABLE journal_watch.pre_t3_requests
+  ADD INDEX idx_pre_t3_student_id     (student_id),
+  ADD INDEX idx_pre_t3_overall_status (overall_status);
 
 -- ============================================================
 -- advisor_assignments
 -- ============================================================
-CREATE INDEX idx_advisor_student_id ON journal_watch.advisor_assignments(student_id);
-CREATE INDEX idx_advisor_advisor_id ON journal_watch.advisor_assignments(advisor_id);
+ALTER TABLE journal_watch.advisor_assignments
+  ADD INDEX idx_advisor_student_id (student_id),
+  ADD INDEX idx_advisor_advisor_id (advisor_id);
 
 -- ============================================================
 -- otp_requests / refresh_tokens
 -- ============================================================
-CREATE INDEX idx_otp_user_purpose  ON journal_watch.otp_requests(user_id, purpose);
-CREATE INDEX idx_refresh_user_id   ON journal_watch.refresh_tokens(user_id);
+ALTER TABLE journal_watch.otp_requests
+  ADD INDEX idx_otp_user_purpose (user_id, purpose);
+
+ALTER TABLE journal_watch.refresh_tokens
+  ADD INDEX idx_refresh_user_id (user_id);
