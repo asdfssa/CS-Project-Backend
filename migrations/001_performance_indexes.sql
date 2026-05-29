@@ -12,15 +12,15 @@
 -- ============================================================
 ALTER TABLE journal_watch.t3_requests
   ADD COLUMN adv_user_id    INT UNSIGNED GENERATED ALWAYS AS
-    (CAST(JSON_EXTRACT(advisor_approval,      '$.user_id') AS UNSIGNED)) STORED,
+    (CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(advisor_approval,      '$.user_id')), 'null') AS UNSIGNED)) STORED,
   ADD COLUMN adv_status     VARCHAR(20)  GENERATED ALWAYS AS
     (JSON_UNQUOTE(JSON_EXTRACT(advisor_approval,           '$.status'))) STORED,
   ADD COLUMN co1_user_id    INT UNSIGNED GENERATED ALWAYS AS
-    (CAST(JSON_EXTRACT(co_advisor_1_approval, '$.user_id') AS UNSIGNED)) STORED,
+    (CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(co_advisor_1_approval, '$.user_id')), 'null') AS UNSIGNED)) STORED,
   ADD COLUMN co1_status     VARCHAR(20)  GENERATED ALWAYS AS
     (JSON_UNQUOTE(JSON_EXTRACT(co_advisor_1_approval,      '$.status'))) STORED,
   ADD COLUMN co2_user_id    INT UNSIGNED GENERATED ALWAYS AS
-    (CAST(JSON_EXTRACT(co_advisor_2_approval, '$.user_id') AS UNSIGNED)) STORED,
+    (CAST(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(co_advisor_2_approval, '$.user_id')), 'null') AS UNSIGNED)) STORED,
   ADD COLUMN co2_status     VARCHAR(20)  GENERATED ALWAYS AS
     (JSON_UNQUOTE(JSON_EXTRACT(co_advisor_2_approval,      '$.status'))) STORED,
   ADD COLUMN faculty_status VARCHAR(20)  GENERATED ALWAYS AS
