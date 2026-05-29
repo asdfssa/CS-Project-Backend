@@ -12,50 +12,54 @@ class AdminController {
   // ============================================================
   static async getStats(req, res, next) {
     try {
-      const [userRows] = await db.query(`
-        SELECT
-          COUNT(*)                                              AS total,
-          SUM(role = 'Student')                                AS students,
-          SUM(role = 'Supervisor')                             AS supervisors,
-          SUM(role = 'Staff')                                  AS staff,
-          SUM(role IN ('Admin','SuperAdmin'))                  AS admins,
-          SUM(account_status = 'Pending')                     AS pending,
-          SUM(account_status = 'Active')                      AS active,
-          SUM(account_status = 'Suspended')                   AS suspended
-        FROM journal_watch.users
-        WHERE deleted_at IS NULL
-      `);
-
-      const [preT3Rows] = await db.query(`
-        SELECT COUNT(*) AS total,
-          SUM(overall_status = 'Pending')  AS pending,
-          SUM(overall_status = 'Approved') AS approved,
-          SUM(overall_status = 'Rejected') AS rejected
-        FROM journal_watch.pre_t3_requests
-      `);
-
-      const [t3Rows] = await db.query(`
-        SELECT COUNT(*) AS total,
-          SUM(overall_status = 'Pending')  AS pending,
-          SUM(overall_status = 'Approved') AS approved,
-          SUM(overall_status = 'Rejected') AS rejected
-        FROM journal_watch.t3_requests
-      `);
-
-      const [cacheRows] = await db.query(`
-        SELECT COUNT(*) AS total,
-          SUM(database_source = 'Scopus')   AS scopus,
-          SUM(database_source = 'TCI')      AS tci,
-          SUM(fetch_method = 'API')         AS via_api,
-          SUM(fetch_method = 'Scraping')    AS via_scraping
-        FROM journal_watch.journals_cache
-      `);
-
-      const [unwantedRows] = await db.query(`
-        SELECT COUNT(*) AS total
-        FROM journal_watch.msu_unwanted_journals
-        WHERE deleted_at IS NULL
-      `);
+      const [
+        [userRows],
+        [preT3Rows],
+        [t3Rows],
+        [cacheRows],
+        [unwantedRows],
+      ] = await Promise.all([
+        db.query(`
+          SELECT
+            COUNT(*)                                              AS total,
+            SUM(role = 'Student')                                AS students,
+            SUM(role = 'Supervisor')                             AS supervisors,
+            SUM(role = 'Staff')                                  AS staff,
+            SUM(role IN ('Admin','SuperAdmin'))                  AS admins,
+            SUM(account_status = 'Pending')                     AS pending,
+            SUM(account_status = 'Active')                      AS active,
+            SUM(account_status = 'Suspended')                   AS suspended
+          FROM journal_watch.users
+          WHERE deleted_at IS NULL
+        `),
+        db.query(`
+          SELECT COUNT(*) AS total,
+            SUM(overall_status = 'Pending')  AS pending,
+            SUM(overall_status = 'Approved') AS approved,
+            SUM(overall_status = 'Rejected') AS rejected
+          FROM journal_watch.pre_t3_requests
+        `),
+        db.query(`
+          SELECT COUNT(*) AS total,
+            SUM(overall_status = 'Pending')  AS pending,
+            SUM(overall_status = 'Approved') AS approved,
+            SUM(overall_status = 'Rejected') AS rejected
+          FROM journal_watch.t3_requests
+        `),
+        db.query(`
+          SELECT COUNT(*) AS total,
+            SUM(database_source = 'Scopus')   AS scopus,
+            SUM(database_source = 'TCI')      AS tci,
+            SUM(fetch_method = 'API')         AS via_api,
+            SUM(fetch_method = 'Scraping')    AS via_scraping
+          FROM journal_watch.journals_cache
+        `),
+        db.query(`
+          SELECT COUNT(*) AS total
+          FROM journal_watch.msu_unwanted_journals
+          WHERE deleted_at IS NULL
+        `),
+      ]);
 
       let apiKeyStats = [];
       try {

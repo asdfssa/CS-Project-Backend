@@ -14,3 +14,4 @@ coverage/
 insert_superadmin.sql
 cloudflared/*.json
 uploads/
+test-insert/

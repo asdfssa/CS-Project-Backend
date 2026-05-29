@@ -52,44 +52,41 @@ class BugReportModel {
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const offset = (page - 1) * limit;
 
-    const [rows] = await db.query(
-      `SELECT
-         br.report_id,
-         br.category,
-         br.title,
-         br.description,
-         br.page_url,
-         br.screenshot_path,
-         br.status,
-         br.resolved_note,
-         br.resolved_at,
-         br.created_at,
-         br.updated_at,
-         -- ผู้รายงาน
-         u.user_id    AS reporter_id,
-         u.first_name AS reporter_first_name,
-         u.last_name  AS reporter_last_name,
-         u.msu_mail   AS reporter_email,
-         u.role       AS reporter_role,
-         -- Admin ที่ resolve
-         a.user_id    AS resolver_id,
-         a.first_name AS resolver_first_name,
-         a.last_name  AS resolver_last_name
-       FROM journal_watch.bug_reports br
-       JOIN journal_watch.users u ON u.user_id = br.reported_by
-       LEFT JOIN journal_watch.users a ON a.user_id = br.resolved_by
-       ${where}
-       ORDER BY br.created_at DESC
-       LIMIT ? OFFSET ?`,
-      [...params, limit, offset]
-    );
-
-    const [[{ total }]] = await db.query(
-      `SELECT COUNT(*) AS total
-       FROM journal_watch.bug_reports br
-       ${where}`,
-      params
-    );
+    const [[rows], [[{ total }]]] = await Promise.all([
+      db.query(
+        `SELECT
+           br.report_id,
+           br.category,
+           br.title,
+           br.description,
+           br.page_url,
+           br.screenshot_path,
+           br.status,
+           br.resolved_note,
+           br.resolved_at,
+           br.created_at,
+           br.updated_at,
+           u.user_id    AS reporter_id,
+           u.first_name AS reporter_first_name,
+           u.last_name  AS reporter_last_name,
+           u.msu_mail   AS reporter_email,
+           u.role       AS reporter_role,
+           a.user_id    AS resolver_id,
+           a.first_name AS resolver_first_name,
+           a.last_name  AS resolver_last_name
+         FROM journal_watch.bug_reports br
+         JOIN journal_watch.users u ON u.user_id = br.reported_by
+         LEFT JOIN journal_watch.users a ON a.user_id = br.resolved_by
+         ${where}
+         ORDER BY br.created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+      ),
+      db.query(
+        `SELECT COUNT(*) AS total FROM journal_watch.bug_reports br ${where}`,
+        params
+      ),
+    ]);
 
     return { rows, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
@@ -126,7 +123,9 @@ class BugReportModel {
   static async findById(reportId) {
     const [rows] = await db.query(
       `SELECT
-         br.*,
+         br.report_id, br.category, br.title, br.description,
+         br.page_url, br.screenshot_path, br.status,
+         br.resolved_note, br.resolved_at, br.created_at, br.updated_at,
          u.user_id    AS reporter_id,
          u.first_name AS reporter_first_name,
          u.last_name  AS reporter_last_name,
@@ -138,7 +137,8 @@ class BugReportModel {
        FROM journal_watch.bug_reports br
        JOIN journal_watch.users u ON u.user_id = br.reported_by
        LEFT JOIN journal_watch.users a ON a.user_id = br.resolved_by
-       WHERE br.report_id = ?`,
+       WHERE br.report_id = ?
+       LIMIT 1`,
       [reportId]
     );
     return rows[0] || null;
