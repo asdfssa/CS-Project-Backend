@@ -76,7 +76,7 @@
           "name": "วารสาร",
           "item": [
             {
-              "name": "ค้นหา Scopus",
+              "name": "ค้นหา Scopus (Cache/API)",
               "request": {
                 "method": "GET",
                 "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
@@ -84,11 +84,27 @@
               }, "response": []
             },
             {
-              "name": "ค้นหา TCI",
+              "name": "ค้นหา Scopus (Web Scraping — Real-time)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": { "raw": "{{base_url}}/journal/scopus/scrape?issn=14741733", "host": ["{{base_url}}"], "path": ["journal", "scopus", "scrape"], "query": [{ "key": "issn", "value": "14741733" }] }
+              }, "response": []
+            },
+            {
+              "name": "ค้นหา TCI (Cache/API)",
               "request": {
                 "method": "GET",
                 "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
                 "url": { "raw": "{{base_url}}/journal/tci?issn=0125-8281", "host": ["{{base_url}}"], "path": ["journal", "tci"], "query": [{ "key": "issn", "value": "0125-8281" }] }
+              }, "response": []
+            },
+            {
+              "name": "ค้นหา TCI (Web Scraping — Real-time)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": { "raw": "{{base_url}}/journal/tci/scrape?issn=2468-1458", "host": ["{{base_url}}"], "path": ["journal", "tci", "scrape"], "query": [{ "key": "issn", "value": "2468-1458" }] }
               }, "response": []
             },
             {
@@ -327,7 +343,7 @@
           "name": "วารสาร",
           "item": [
             {
-              "name": "ค้นหา Scopus",
+              "name": "ค้นหา Scopus (Cache/API)",
               "request": {
                 "method": "GET",
                 "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
@@ -335,11 +351,27 @@
               }, "response": []
             },
             {
-              "name": "ค้นหา TCI",
+              "name": "ค้นหา Scopus (Web Scraping — Real-time)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": { "raw": "{{base_url}}/journal/scopus/scrape?issn=14741733", "host": ["{{base_url}}"], "path": ["journal", "scopus", "scrape"], "query": [{ "key": "issn", "value": "14741733" }] }
+              }, "response": []
+            },
+            {
+              "name": "ค้นหา TCI (Cache/API)",
               "request": {
                 "method": "GET",
                 "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
                 "url": { "raw": "{{base_url}}/journal/tci?issn=0125-8281", "host": ["{{base_url}}"], "path": ["journal", "tci"], "query": [{ "key": "issn", "value": "0125-8281" }] }
+              }, "response": []
+            },
+            {
+              "name": "ค้นหา TCI (Web Scraping — Real-time)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": { "raw": "{{base_url}}/journal/tci/scrape?issn=2468-1458", "host": ["{{base_url}}"], "path": ["journal", "tci", "scrape"], "query": [{ "key": "issn", "value": "2468-1458" }] }
               }, "response": []
             },
             {
@@ -616,6 +648,51 @@
                 "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }, { "key": "Content-Type", "value": "application/json" }],
                 "body": { "mode": "raw", "raw": "{\n  \"prefix\": \"นาย\",\n  \"first_name\": \"สมชาย\",\n  \"last_name\": \"ใจดี\",\n  \"msu_mail\": \"somchai@msu.ac.th\",\n  \"phone\": \"0812345678\",\n  \"degree_level\": \"Master\",\n  \"curriculum_year\": \"2566\",\n  \"study_plan_code\": \"Master_A1\"\n}" },
                 "url": { "raw": "{{base_url}}/manage/users/1", "host": ["{{base_url}}"], "path": ["manage", "users", "1"] }
+              }, "response": []
+            }
+          ]
+        },
+        {
+          "name": "วารสาร",
+          "item": [
+            {
+              "name": "ค้นหา Scopus (Cache/API)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": { "raw": "{{base_url}}/journal/scopus?issn=0125-8281", "host": ["{{base_url}}"], "path": ["journal", "scopus"], "query": [{ "key": "issn", "value": "0125-8281" }] }
+              }, "response": []
+            },
+            {
+              "name": "ค้นหา Scopus (Web Scraping — Real-time)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": { "raw": "{{base_url}}/journal/scopus/scrape?issn=14741733", "host": ["{{base_url}}"], "path": ["journal", "scopus", "scrape"], "query": [{ "key": "issn", "value": "14741733" }] }
+              }, "response": []
+            },
+            {
+              "name": "ค้นหา TCI (Cache/API)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": { "raw": "{{base_url}}/journal/tci?issn=0125-8281", "host": ["{{base_url}}"], "path": ["journal", "tci"], "query": [{ "key": "issn", "value": "0125-8281" }] }
+              }, "response": []
+            },
+            {
+              "name": "ค้นหา TCI (Web Scraping — Real-time)",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": { "raw": "{{base_url}}/journal/tci/scrape?issn=2468-1458", "host": ["{{base_url}}"], "path": ["journal", "tci", "scrape"], "query": [{ "key": "issn", "value": "2468-1458" }] }
+              }, "response": []
+            },
+            {
+              "name": "Proxy Status",
+              "request": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+                "url": { "raw": "{{base_url}}/journal/proxy-status", "host": ["{{base_url}}"], "path": ["journal", "proxy-status"] }
               }, "response": []
             }
           ]
