@@ -154,14 +154,9 @@ class T3Model {
          JOIN journal_watch.users u ON u.user_id = t.student_id
         WHERE t.overall_status = 'Pending'
           AND (
-            JSON_UNQUOTE(JSON_EXTRACT(t.advisor_approval,       '$.user_id')) = ?
-              AND JSON_UNQUOTE(JSON_EXTRACT(t.advisor_approval, '$.status'))  = 'Pending'
-          OR
-            JSON_UNQUOTE(JSON_EXTRACT(t.co_advisor_1_approval,  '$.user_id')) = ?
-              AND JSON_UNQUOTE(JSON_EXTRACT(t.co_advisor_1_approval, '$.status')) = 'Pending'
-          OR
-            JSON_UNQUOTE(JSON_EXTRACT(t.co_advisor_2_approval,  '$.user_id')) = ?
-              AND JSON_UNQUOTE(JSON_EXTRACT(t.co_advisor_2_approval, '$.status')) = 'Pending'
+            (t.adv_user_id = ? AND t.adv_status = 'Pending')
+            OR (t.co1_user_id = ? AND t.co1_status = 'Pending')
+            OR (t.co2_user_id = ? AND t.co2_status = 'Pending')
           )
         ORDER BY t.created_at ASC`,
       [advisorId, advisorId, advisorId]
@@ -183,10 +178,9 @@ class T3Model {
          FROM journal_watch.t3_requests t
          JOIN journal_watch.users u ON u.user_id = t.student_id
         WHERE t.overall_status = 'Pending'
-          AND JSON_UNQUOTE(JSON_EXTRACT(t.advisor_approval,      '$.status')) = 'Approved'
-          AND JSON_UNQUOTE(JSON_EXTRACT(t.faculty_com_approval,  '$.status')) = 'Pending'
-        ORDER BY t.created_at ASC`,
-      []
+          AND t.adv_status     = 'Approved'
+          AND t.faculty_status = 'Pending'
+        ORDER BY t.created_at ASC`
     );
     return rows;
   }

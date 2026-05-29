@@ -449,12 +449,40 @@ records = parse(req.file.buffer, {
 
         const errors = [];
 
+        // Batch prefetch: ดึงข้อมูลที่ต้องตรวจสอบทั้งหมดใน 2 queries แทนการ query ต่อ row
+        const allMails = records
+          .map(r => r.msu_mail?.toLowerCase().trim())
+          .filter(Boolean);
+
+        const allAdvisorMails = [
+          ...records.map(r => r.advisor_major_mail?.toLowerCase().trim()),
+          ...records.map(r => r.advisor_co1_mail?.toLowerCase().trim()),
+        ].filter(Boolean);
+
+        let existingMailSet = new Set();
+        if (allMails.length) {
+          const [existingRows] = await db.query(
+            `SELECT msu_mail FROM journal_watch.users WHERE msu_mail IN (?) AND deleted_at IS NULL`,
+            [allMails]
+          );
+          existingMailSet = new Set(existingRows.map(r => r.msu_mail));
+        }
+
+        let advisorMailMap = {};
+        if (allAdvisorMails.length) {
+          const [advisorRows] = await db.query(
+            `SELECT user_id, msu_mail FROM journal_watch.users
+             WHERE msu_mail IN (?) AND role = 'Supervisor' AND deleted_at IS NULL`,
+            [allAdvisorMails]
+          );
+          for (const a of advisorRows) advisorMailMap[a.msu_mail] = a.user_id;
+        }
+
         // ===== Validate ทุก row ก่อน (all-or-nothing) =====
         for (let i = 0; i < records.length; i++) {
           const row = records[i];
           const rowNum = i + 2; // +2 เพราะ row 1 = header
 
-          // required fields
           if (!row.role)       errors.push(`Row ${rowNum}: ไม่มี role`);
           if (!row.first_name) errors.push(`Row ${rowNum}: ไม่มี first_name`);
           if (!row.last_name)  errors.push(`Row ${rowNum}: ไม่มี last_name`);
@@ -465,39 +493,25 @@ records = parse(req.file.buffer, {
             errors.push(`Row ${rowNum}: role "${row.role}" ไม่ถูกต้อง`);
 
           if (row.msu_mail) {
-            // เช็กซ้ำในระบบ
-            const [dup] = await db.query(
-              `SELECT user_id FROM journal_watch.users WHERE msu_mail = ? AND deleted_at IS NULL`,
-              [row.msu_mail.toLowerCase().trim()]
-            );
-            if (dup.length) errors.push(`Row ${rowNum}: MSU Mail ${row.msu_mail} มีอยู่ในระบบแล้ว`);
+            const mail = row.msu_mail.toLowerCase().trim();
+            if (existingMailSet.has(mail))
+              errors.push(`Row ${rowNum}: MSU Mail ${row.msu_mail} มีอยู่ในระบบแล้ว`);
 
-            // เช็กซ้ำในไฟล์เดียวกัน
             const dupInFile = records.filter((r, idx) =>
-              idx !== i && r.msu_mail?.toLowerCase().trim() === row.msu_mail.toLowerCase().trim()
+              idx !== i && r.msu_mail?.toLowerCase().trim() === mail
             );
             if (dupInFile.length) errors.push(`Row ${rowNum}: MSU Mail ${row.msu_mail} ซ้ำในไฟล์`);
           }
 
-          // เช็ก advisor เฉพาะ Student (optional)
           if (row.role === 'Student') {
             if (row.advisor_major_mail) {
-              const [maj] = await db.query(
-                `SELECT user_id FROM journal_watch.users
-                 WHERE msu_mail = ? AND role = 'Supervisor' AND deleted_at IS NULL`,
-                [row.advisor_major_mail.toLowerCase().trim()]
-              );
-              if (!maj.length)
+              const mail = row.advisor_major_mail.toLowerCase().trim();
+              if (!advisorMailMap[mail])
                 errors.push(`Row ${rowNum}: ไม่พบอาจารย์ที่ปรึกษาหลัก "${row.advisor_major_mail}" ในระบบ`);
             }
-
             if (row.advisor_co1_mail) {
-              const [co1] = await db.query(
-                `SELECT user_id FROM journal_watch.users
-                 WHERE msu_mail = ? AND role = 'Supervisor' AND deleted_at IS NULL`,
-                [row.advisor_co1_mail.toLowerCase().trim()]
-              );
-              if (!co1.length)
+              const mail = row.advisor_co1_mail.toLowerCase().trim();
+              if (!advisorMailMap[mail])
                 errors.push(`Row ${rowNum}: ไม่พบอาจารย์ที่ปรึกษาร่วม "${row.advisor_co1_mail}" ในระบบ`);
             }
           }
@@ -533,30 +547,24 @@ records = parse(req.file.buffer, {
           );
           const newUserId = result.insertId;
 
-          // advisor_assignments
+          // ใช้ advisorMailMap ที่ fetch ไว้แล้ว ไม่ต้อง query ซ้ำ
           if (row.role === 'Student' && row.advisor_major_mail) {
-            const [maj] = await db.query(
-              `SELECT user_id FROM journal_watch.users WHERE msu_mail = ? AND deleted_at IS NULL`,
-              [row.advisor_major_mail.toLowerCase().trim()]
-            );
-            if (maj.length) {
+            const majorAdvisorId = advisorMailMap[row.advisor_major_mail.toLowerCase().trim()];
+            if (majorAdvisorId) {
               await db.query(
                 `INSERT INTO journal_watch.advisor_assignments
                    (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Major')`,
-                [newUserId, maj[0].user_id]
+                [newUserId, majorAdvisorId]
               );
             }
 
             if (row.advisor_co1_mail) {
-              const [co1] = await db.query(
-                `SELECT user_id FROM journal_watch.users WHERE msu_mail = ? AND deleted_at IS NULL`,
-                [row.advisor_co1_mail.toLowerCase().trim()]
-              );
-              if (co1.length) {
+              const co1AdvisorId = advisorMailMap[row.advisor_co1_mail.toLowerCase().trim()];
+              if (co1AdvisorId) {
                 await db.query(
                   `INSERT INTO journal_watch.advisor_assignments
                      (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Co_1')`,
-                  [newUserId, co1[0].user_id]
+                  [newUserId, co1AdvisorId]
                 );
               }
             }
