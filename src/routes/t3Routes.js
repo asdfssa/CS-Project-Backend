@@ -6,6 +6,18 @@ const express       = require('express');
 const router        = express.Router();
 const T3Controller  = require('../controllers/T3Controller');
 const { requireAuth, requireRole } = require('../middlewares/auth');
+const { uploadT3FieldsMemory } = require('../middlewares/upload');
+
+// multer error handler (เหมือนกับใน uploadRoutes)
+const handleMulterError = (err, req, res, next) => {
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ success: false, code: 'FILE_TOO_LARGE', message: 'ไฟล์มีขนาดเกิน 10 MB' });
+  }
+  if (err.message && err.message.includes('ประเภทไฟล์')) {
+    return res.status(400).json({ success: false, code: 'INVALID_FILE_TYPE', message: err.message });
+  }
+  next(err);
+};
 
 // -------------------------------------------------------
 // นิสิตยื่น T3 ใหม่
@@ -16,6 +28,24 @@ router.post(
   requireAuth,
   requireRole('Student'),
   T3Controller.submit
+);
+
+// -------------------------------------------------------
+// นิสิตยื่น T3 + อัปโหลดไฟล์แนบพร้อมกันในคำขอเดียว
+// POST /api/t3/with-files
+// Content-Type: multipart/form-data
+// Text fields (JSON string): pre_t3_id, journal_snapshot,
+//   paper_and_research_details, publication_details, journal_metrics
+// File fields (optional): acceptance_letter, full_paper, journal_cover,
+//   table_of_contents, database_evidence, peer_review_result
+// -------------------------------------------------------
+router.post(
+  '/with-files',
+  requireAuth,
+  requireRole('Student'),
+  uploadT3FieldsMemory,
+  handleMulterError,
+  T3Controller.submitWithFiles
 );
 
 // -------------------------------------------------------

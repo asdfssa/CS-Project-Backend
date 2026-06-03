@@ -62,4 +62,11 @@ const uploadT3Fields = upload.fields(
   T3_FIELDS.map(name => ({ name, maxCount: 1 }))
 );
 
-module.exports = { upload, uploadT3Fields, T3_FIELDS };
+// Memory storage — ใช้กับ endpoint ที่ยังไม่มี t3_id (submit + upload พร้อมกัน)
+const uploadT3FieldsMemory = multer({
+  storage: multer.memoryStorage(),
+  fileFilter,
+  limits: { fileSize: MAX_FILE_SIZE },
+}).fields(T3_FIELDS.map(name => ({ name, maxCount: 1 })));
+
+module.exports = { upload, uploadT3Fields, uploadT3FieldsMemory, T3_FIELDS };

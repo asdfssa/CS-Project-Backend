@@ -11,12 +11,23 @@
  *   PATCH  /api/t3/:id/faculty-review       → Staff บันทึกมติ Faculty Com
  *   PATCH  /api/t3/:id/grad-school-review   → Staff บันทึกผล Grad School (จากอีเมล)
  */
+const path = require('path');
+const fs   = require('fs');
 const T3Model     = require('../models/T3Model');
 const PreT3Model  = require('../models/PreT3Model');
 const UserModel   = require('../models/UserModel');
 const MailService = require('../services/MailService');
 const db          = require('../config/database');
 const { serverError } = require('../utils/errorResponse');
+
+const FIELD_TO_KEY = {
+  acceptance_letter:  'acceptance_letter_path',
+  full_paper:         'full_paper_path',
+  journal_cover:      'journal_cover_path',
+  table_of_contents:  'table_of_contents_path',
+  database_evidence:  'database_evidence_path',
+  peer_review_result: 'peer_review_result_path',
+};
 
 class T3Controller {
   // ============================================================
@@ -456,6 +467,187 @@ class T3Controller {
       return res.json({ success: true, message: 'ยกเลิก T3 เรียบร้อยแล้ว' });
     } catch (err) {
       return serverError(res, err, 'T3Controller.cancel');
+    }
+  }
+
+  // ============================================================
+  // POST /api/t3/with-files
+  // Role: Student
+  // Content-Type: multipart/form-data
+  // Text fields (JSON string): pre_t3_id, journal_snapshot,
+  //   paper_and_research_details, publication_details, journal_metrics
+  // File fields (optional): acceptance_letter, full_paper, journal_cover,
+  //   table_of_contents, database_evidence, peer_review_result
+  // ============================================================
+  static async submitWithFiles(req, res) {
+    try {
+      const studentId = req.user.sub;
+
+      // multipart/form-data → ค่า JSON ส่งมาเป็น string ต้อง parse
+      const tryParse = (val) => {
+        if (typeof val === 'string') { try { return JSON.parse(val); } catch { return val; } }
+        return val;
+      };
+
+      const pre_t3_id                  = tryParse(req.body.pre_t3_id);
+      const journal_snapshot           = tryParse(req.body.journal_snapshot);
+      const paper_and_research_details = tryParse(req.body.paper_and_research_details);
+      const publication_details        = tryParse(req.body.publication_details);
+      const journal_metrics            = tryParse(req.body.journal_metrics);
+
+      // --- Validate required fields ---
+      if (!pre_t3_id || !journal_snapshot || !paper_and_research_details || !publication_details || !journal_metrics) {
+        return res.status(400).json({
+          success: false,
+          code: 'MISSING_FIELDS',
+          message: 'กรุณาระบุ pre_t3_id, journal_snapshot, paper_and_research_details, publication_details, journal_metrics',
+        });
+      }
+
+      const paperRequired = ['title_thai', 'title_english', 'first_author', 'corresponding_author'];
+      for (const field of paperRequired) {
+        if (!paper_and_research_details[field]) {
+          return res.status(400).json({
+            success: false,
+            code: 'MISSING_PAPER_FIELD',
+            message: `paper_and_research_details.${field} จำเป็นต้องระบุ`,
+          });
+        }
+      }
+
+      const pubRequired = ['type', 'weight_score'];
+      for (const field of pubRequired) {
+        if (publication_details[field] === undefined) {
+          return res.status(400).json({
+            success: false,
+            code: 'MISSING_PUB_FIELD',
+            message: `publication_details.${field} จำเป็นต้องระบุ`,
+          });
+        }
+      }
+
+      if (journal_metrics.has_impact_score === undefined) {
+        return res.status(400).json({
+          success: false,
+          code: 'MISSING_METRICS',
+          message: 'journal_metrics.has_impact_score จำเป็นต้องระบุ',
+        });
+      }
+
+      const preT3 = await PreT3Model.findById(pre_t3_id);
+      if (!preT3) {
+        return res.status(404).json({ success: false, code: 'PRE_T3_NOT_FOUND', message: 'ไม่พบ Pre-T3 นี้' });
+      }
+      if (preT3.student_id !== studentId) {
+        return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Pre-T3 นี้ไม่ใช่ของคุณ' });
+      }
+      if (preT3.overall_status !== 'Approved') {
+        return res.status(400).json({
+          success: false,
+          code: 'PRE_T3_NOT_APPROVED',
+          message: `Pre-T3 ต้องได้รับการอนุมัติก่อน (สถานะปัจจุบัน: ${preT3.overall_status})`,
+        });
+      }
+
+      const student = await UserModel.findById(studentId);
+      if (!student) {
+        return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', message: 'ไม่พบข้อมูลผู้ใช้' });
+      }
+
+      const studentSnapshot = {
+        degree_level:    student.degree_level,
+        study_plan_code: student.study_plan_code,
+        curriculum_year: student.curriculum_year,
+      };
+
+      const [advisorRows] = await db.query(
+        `SELECT advisor_id, advisor_type
+           FROM journal_watch.advisor_assignments
+          WHERE student_id = ? AND is_active = TRUE`,
+        [studentId]
+      );
+
+      const majorAdvisor = advisorRows.find(a => a.advisor_type === 'Major');
+      const co1Advisor   = advisorRows.find(a => a.advisor_type === 'Co_1');
+      const co2Advisor   = advisorRows.find(a => a.advisor_type === 'Co_2');
+
+      if (!majorAdvisor) {
+        return res.status(400).json({ success: false, code: 'NO_MAJOR_ADVISOR', message: 'ยังไม่มีอาจารย์ที่ปรึกษาหลัก' });
+      }
+
+      const issn = journal_snapshot.issn;
+
+      const t3Id = await T3Model.create(
+        studentId,
+        pre_t3_id,
+        issn,
+        journal_snapshot,
+        studentSnapshot,
+        paper_and_research_details,
+        publication_details,
+        journal_metrics,
+        {
+          majorAdvisorId: majorAdvisor.advisor_id,
+          coAdvisor1Id:   co1Advisor?.advisor_id || null,
+          coAdvisor2Id:   co2Advisor?.advisor_id || null,
+        }
+      );
+
+      // --- จัดการไฟล์ (ถ้ามี) ---
+      const evidenceFiles = {};
+      const uploaded = {};
+
+      if (req.files && Object.keys(req.files).length > 0) {
+        for (const [fieldName, fileArr] of Object.entries(req.files)) {
+          const key = FIELD_TO_KEY[fieldName];
+          if (!key) continue;
+
+          const file     = fileArr[0];
+          const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const filename = `${Date.now()}_${safeName}`;
+          const dir      = path.join(process.cwd(), 'uploads', 't3', String(t3Id), fieldName);
+
+          fs.mkdirSync(dir, { recursive: true });
+          const filePath     = path.join(dir, filename);
+          fs.writeFileSync(filePath, file.buffer);
+
+          const relativePath   = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+          evidenceFiles[key]   = relativePath;
+          uploaded[fieldName]  = relativePath;
+        }
+
+        await db.query(
+          `UPDATE journal_watch.t3_requests
+              SET journal_evidence_files = ?
+            WHERE t3_id = ?`,
+          [JSON.stringify(evidenceFiles), t3Id]
+        );
+      }
+
+      // แจ้ง Advisor ทางอีเมล
+      const advisorUser = await UserModel.findById(majorAdvisor.advisor_id);
+      if (advisorUser) {
+        await MailService.sendT3Notification(advisorUser.msu_mail, 'advisor_pending', {
+          studentName:  `${student.first_name} ${student.last_name}`,
+          journalName:  journal_snapshot.journal_name,
+          articleTitle: paper_and_research_details.title_english || paper_and_research_details.title_thai,
+          t3Id,
+        });
+      }
+
+      const uploadedCount = Object.keys(uploaded).length;
+      return res.status(201).json({
+        success: true,
+        message: uploadedCount > 0
+          ? `ยื่น T3 และอัปโหลด ${uploadedCount} ไฟล์สำเร็จ กรุณารอการอนุมัติจากอาจารย์ที่ปรึกษา`
+          : 'ยื่น T3 สำเร็จ กรุณารอการอนุมัติจากอาจารย์ที่ปรึกษา',
+        data: {
+          t3_id:    t3Id,
+          uploaded: uploadedCount > 0 ? uploaded : undefined,
+        },
+      });
+    } catch (err) {
+      return serverError(res, err, 'T3Controller.submitWithFiles');
     }
   }
 
