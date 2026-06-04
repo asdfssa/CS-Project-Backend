@@ -70,6 +70,35 @@ function requireOtpToken(req, res, next) {
   }
 }
 
+function requirePasswordResetToken(req, res, next) {
+  const token = extractToken(req);
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      code: 'NO_RESET_TOKEN',
+      message: 'กรุณาระบุ Reset OTP Token',
+    });
+  }
+  try {
+    const payload = jwtUtil.verifyToken(token);
+    if (payload.type !== 'reset_pending') {
+      return res.status(401).json({
+        success: false,
+        code: 'WRONG_TOKEN_TYPE',
+        message: 'ประเภท Token ไม่ถูกต้อง',
+      });
+    }
+    req.resetUserId = payload.sub;
+    next();
+  } catch (err) {
+    return res.status(401).json({
+      success: false,
+      code: 'RESET_TOKEN_EXPIRED',
+      message: 'Token หมดอายุ กรุณาขอรีเซ็ตรหัสผ่านใหม่',
+    });
+  }
+}
+
 function requireRole(...allowedRoles) {
   return (req, res, next) => {
     if (!req.user || !allowedRoles.includes(req.user.role)) {
@@ -83,4 +112,4 @@ function requireRole(...allowedRoles) {
   };
 }
 
-module.exports = { requireAuth, requireOtpToken, requireRole };
+module.exports = { requireAuth, requireOtpToken, requirePasswordResetToken, requireRole };

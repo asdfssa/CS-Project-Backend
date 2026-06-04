@@ -42,6 +42,17 @@ function issueOtpToken(userId) {
   });
 }
 
+function issuePasswordResetOtpToken(userId) {
+  const payload = {
+    sub: userId,
+    type: 'reset_pending',
+  };
+  return jwt.sign(payload, config.jwt.secret, {
+    expiresIn: config.jwt.otpExpiresIn,
+    issuer: 'journal-watch',
+  });
+}
+
 /**
  * ออก refresh token เป็น random string (ไม่ใช่ JWT)
  * เก็บ hash ไว้ใน DB ไม่เก็บ plain text
@@ -69,6 +80,7 @@ module.exports = {
   issueAccessToken,
   issueLoginToken,
   issueOtpToken,
+  issuePasswordResetOtpToken,
   issueRefreshToken,
   hashRefreshToken,
   verifyToken,

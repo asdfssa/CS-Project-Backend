@@ -233,6 +233,61 @@ static async me(req, res, next) {
   }
 
   /**
+   * POST /api/auth/forgot-password
+   * Body: { username }
+   */
+  static async forgotPassword(req, res, next) {
+    try {
+      const { username } = req.body;
+      const result = await AuthService.requestPasswordReset({
+        username,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      return res.json({
+        success: true,
+        message: 'ส่ง OTP ไปยังอีเมลของคุณแล้ว',
+        data: {
+          resetOtpToken: result.resetOtpToken,
+          maskedEmail: result.maskedEmail,
+          expiresIn: result.expiresIn,
+        },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
+   * POST /api/auth/reset-password
+   * Header: Authorization: Bearer <resetOtpToken>
+   * Body: { otpCode, newPassword, confirmPassword }
+   */
+  static async resetPassword(req, res, next) {
+    try {
+      const { otpCode, newPassword } = req.body;
+      await AuthService.resetPassword({
+        userId: req.resetUserId,
+        otpCode,
+        newPassword,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
+      // Clear refresh token cookie ถ้ามี (บังคับ logout session ปัจจุบันด้วย)
+      res.clearCookie('jw_refresh_token', { path: '/api/auth' });
+
+      return res.json({
+        success: true,
+        message: 'รีเซ็ตรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่',
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /**
    * POST /api/auth/register-staff
    */
   static async registerStaff(req, res, next) {

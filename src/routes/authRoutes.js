@@ -4,10 +4,10 @@
  */
 const express = require('express');
 const AuthController = require('../controllers/AuthController');
-const { loginValidator, verifyOtpValidator, googleLoginValidator } = require('../validators/authValidator');
+const { loginValidator, verifyOtpValidator, googleLoginValidator, forgotPasswordValidator, resetPasswordValidator } = require('../validators/authValidator');
 const handleValidation = require('../middlewares/validation');
-const { requireAuth, requireOtpToken } = require('../middlewares/auth');
-const { loginLimiter, googleLimiter, otpLimiter, registerLimiter } = require('../middlewares/rateLimit');
+const { requireAuth, requireOtpToken, requirePasswordResetToken } = require('../middlewares/auth');
+const { loginLimiter, googleLimiter, otpLimiter, registerLimiter, forgotPasswordLimiter } = require('../middlewares/rateLimit');
 const router = express.Router();
 
 // Step 1: ส่ง username + password → รับ OTP token
@@ -37,5 +37,24 @@ router.get('/me', requireAuth, AuthController.me);
 
 // Logout → revoke refresh token + clear cookie
 router.post('/logout', AuthController.logout);
+
+// Password Reset ด้วย 2FA Email (Admin / SuperAdmin เท่านั้น)
+// Step 1: ส่ง username → รับ OTP ทาง email + resetOtpToken
+router.post(
+  '/forgot-password',
+  forgotPasswordLimiter,
+  forgotPasswordValidator,
+  handleValidation,
+  AuthController.forgotPassword
+);
+// Step 2: ส่ง OTP + รหัสผ่านใหม่ → รีเซ็ตรหัสผ่าน
+router.post(
+  '/reset-password',
+  otpLimiter,
+  requirePasswordResetToken,
+  resetPasswordValidator,
+  handleValidation,
+  AuthController.resetPassword
+);
 
 module.exports = router;

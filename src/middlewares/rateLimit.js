@@ -77,4 +77,18 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { loginLimiter, googleLimiter, otpLimiter, registerLimiter };
+// 5 forgot-password requests per 15 min per IP
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skip: skipLocalhost,
+  message: {
+    success: false,
+    code: 'RATE_LIMIT',
+    message: 'ส่งคำขอรีเซ็ตรหัสผ่านเกินจำนวนครั้งที่กำหนด กรุณารอ 15 นาทีแล้วลองใหม่',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+module.exports = { loginLimiter, googleLimiter, otpLimiter, registerLimiter, forgotPasswordLimiter };

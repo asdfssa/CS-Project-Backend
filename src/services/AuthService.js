@@ -361,6 +361,117 @@ class AuthService {
   }
 
   /**
+   * Step 1: ขอรีเซ็ตรหัสผ่าน — ส่ง OTP ไปยัง email
+   * เฉพาะ Admin / SuperAdmin ที่มี username + password
+   */
+  static async requestPasswordReset({ username, ipAddress, userAgent }) {
+    const user = await UserModel.findByUsername(username);
+
+    if (!user || !['Admin', 'SuperAdmin'].includes(user.role)) {
+      // ตอบ generic เพื่อไม่ให้ enumerate username
+      throw new AuthError('ไม่พบบัญชีผู้ใช้ในระบบ', 'USER_NOT_FOUND', 404);
+    }
+
+    if (user.account_status === 'Suspended') {
+      throw new AuthError('บัญชีนี้ถูกระงับการใช้งาน', 'ACCOUNT_SUSPENDED', 403);
+    }
+    if (user.account_status === 'Pending') {
+      throw new AuthError('บัญชีของคุณรอการอนุมัติจากผู้ดูแลระบบ', 'ACCOUNT_PENDING', 403);
+    }
+
+    await OtpModel.invalidateActive(user.user_id, 'password_reset');
+
+    const otpCode = cryptoUtil.generateOtp();
+    const otpHash = cryptoUtil.hashOtp(otpCode);
+    const expiresAt = new Date(Date.now() + config.otp.expiresMinutes * 60 * 1000);
+
+    await OtpModel.create({
+      userId: user.user_id,
+      otpHash,
+      purpose: 'password_reset',
+      expiresAt,
+      ipAddress,
+      userAgent,
+    });
+
+    await MailService.sendOtp(user.msu_mail, otpCode, 'password_reset');
+
+    await SystemLogModel.log({
+      userId: user.user_id,
+      action: 'password_reset_requested',
+      targetType: 'user',
+      targetId: String(user.user_id),
+      ipAddress,
+      userAgent,
+    });
+
+    const resetOtpToken = jwtUtil.issuePasswordResetOtpToken(user.user_id);
+
+    return {
+      resetOtpToken,
+      maskedEmail: this._maskEmail(user.msu_mail),
+      expiresIn: config.otp.expiresMinutes * 60,
+    };
+  }
+
+  /**
+   * Step 2: ยืนยัน OTP + ตั้งรหัสผ่านใหม่
+   */
+  static async resetPassword({ userId, otpCode, newPassword, ipAddress, userAgent }) {
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new AuthError('ไม่พบบัญชีผู้ใช้ในระบบ', 'USER_NOT_FOUND', 404);
+    }
+
+    if (!['Admin', 'SuperAdmin'].includes(user.role)) {
+      throw new AuthError('ไม่มีสิทธิ์ดำเนินการ', 'FORBIDDEN', 403);
+    }
+
+    const activeOtp = await OtpModel.findActive(userId, 'password_reset');
+    if (!activeOtp) {
+      throw new AuthError('OTP หมดอายุหรือไม่พบในระบบ กรุณาขอรีเซ็ตรหัสผ่านใหม่', 'OTP_EXPIRED', 400);
+    }
+
+    if (activeOtp.attempt_count >= config.otp.maxAttempts) {
+      await OtpModel.markAsUsed(activeOtp.otp_id);
+      throw new AuthError('ป้อน OTP เกินจำนวนครั้ง กรุณาขอรีเซ็ตรหัสผ่านใหม่', 'OTP_MAX_ATTEMPTS', 429);
+    }
+
+    const isValid = cryptoUtil.compareOtpHash(otpCode, activeOtp.otp_hash);
+
+    if (!isValid) {
+      await OtpModel.incrementAttempts(activeOtp.otp_id);
+      await SystemLogModel.log({
+        userId,
+        action: 'password_reset_otp_failed',
+        targetType: 'otp',
+        targetId: String(activeOtp.otp_id),
+        ipAddress,
+        userAgent,
+      });
+      const attemptsLeft = config.otp.maxAttempts - (activeOtp.attempt_count + 1);
+      throw new AuthError(`OTP ไม่ถูกต้อง เหลืออีก ${attemptsLeft} ครั้ง`, 'OTP_INVALID', 400);
+    }
+
+    await OtpModel.markAsUsed(activeOtp.otp_id);
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await UserModel.updatePassword(userId, passwordHash);
+
+    // บังคับ logout ทุก session
+    await RefreshTokenModel.revokeAllByUserId(userId);
+
+    await SystemLogModel.log({
+      userId,
+      action: 'password_reset_success',
+      targetType: 'user',
+      targetId: String(userId),
+      ipAddress,
+      userAgent,
+    });
+  }
+
+  /**
    * POST /api/auth/register-staff
    * Staff สมัครด้วย Google OAuth — เช็ค email pattern ก่อน
    */

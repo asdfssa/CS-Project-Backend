@@ -79,6 +79,13 @@ static async findById(userId) {
     return new Date(user.locked_until) > new Date();
   }
 
+  static async updatePassword(userId, passwordHash) {
+    await db.query(
+      `UPDATE journal_watch.users SET password_hash = ?, updated_at = NOW() WHERE user_id = ?`,
+      [passwordHash, userId]
+    );
+  }
+
   static async findAdvisorsByStudentId(studentId) {
   const [rows] = await db.query(
     `SELECT aa.advisor_type,
