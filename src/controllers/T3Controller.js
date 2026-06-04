@@ -653,17 +653,24 @@ class T3Controller {
 
   // ============================================================
   // GET /api/t3/history
-  // Role: Supervisor — ดูประวัติที่ตัวเองเคยอนุมัติ/ปฏิเสธแล้ว
+  // Role: Supervisor → เห็นเฉพาะที่ตัวเองเคย approve/reject
+  //       Staff      → เห็นทั้งหมดที่ Faculty Com เคยตัดสินแล้ว
   // Query: ?status=Approved|Rejected  ?page=1  ?limit=20
   // ============================================================
-  static async getAdvisorHistory(req, res) {
+  static async getHistory(req, res) {
     try {
-      const advisorId = req.user.sub;
-      const status    = ['Approved', 'Rejected'].includes(req.query.status) ? req.query.status : null;
-      const page      = Math.max(1, parseInt(req.query.page)  || 1);
-      const limit     = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+      const { role, sub: userId } = req.user;
+      const status = ['Approved', 'Rejected'].includes(req.query.status) ? req.query.status : null;
+      const page   = Math.max(1, parseInt(req.query.page)  || 1);
+      const limit  = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
 
-      const { rows, total } = await T3Model.findReviewedByAdvisor(advisorId, { status, page, limit });
+      let rows, total;
+      if (role === 'Supervisor') {
+        ({ rows, total } = await T3Model.findReviewedByAdvisor(userId, { status, page, limit }));
+      } else {
+        // Staff
+        ({ rows, total } = await T3Model.findReviewedByFaculty({ status, page, limit }));
+      }
 
       return res.json({
         success: true,
@@ -676,7 +683,7 @@ class T3Controller {
         },
       });
     } catch (err) {
-      return serverError(res, err, 'T3Controller.getAdvisorHistory');
+      return serverError(res, err, 'T3Controller.getHistory');
     }
   }
 

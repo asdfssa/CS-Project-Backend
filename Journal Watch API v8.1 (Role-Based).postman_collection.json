@@ -2528,6 +2528,46 @@
               "response": []
             },
             {
+              "name": "ประวัติการอนุมัติ/ปฏิเสธ Pre-T3 (Faculty Com)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/pre-t3/history?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "pre-t3",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "Approved",
+                      "description": "Approved | Rejected (ถ้าไม่ระบุ = ทั้งหมด)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Staff ดูประวัติ Pre-T3 ทั้งหมดที่ Faculty Com เคยตัดสินแล้ว (Approved หรือ Rejected)\nFilter: ?status=Approved|Rejected (ไม่ระบุ = ทั้งหมด)"
+              },
+              "response": []
+            },
+            {
               "name": "Faculty Com อนุมัติ",
               "request": {
                 "method": "PATCH",
@@ -2649,6 +2689,46 @@
                     "1"
                   ]
                 }
+              },
+              "response": []
+            },
+            {
+              "name": "ประวัติการอนุมัติ/ปฏิเสธ T3 (Faculty Com)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/t3/history?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "t3",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "Approved",
+                      "description": "Approved | Rejected (ถ้าไม่ระบุ = ทั้งหมด)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Staff ดูประวัติ T3 ทั้งหมดที่ Faculty Com เคยตัดสินแล้ว (Approved หรือ Rejected)\nFilter: ?status=Approved|Rejected (ไม่ระบุ = ทั้งหมด)"
               },
               "response": []
             },

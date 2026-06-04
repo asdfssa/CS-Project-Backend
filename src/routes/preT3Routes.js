@@ -41,14 +41,16 @@ router.get(
 );
 
 // -------------------------------------------------------
-// Advisor ดูประวัติที่ตัวเองเคยอนุมัติ/ปฏิเสธแล้ว
+// Advisor/Staff ดูประวัติการอนุมัติ/ปฏิเสธของตัวเอง
+// Supervisor → เฉพาะที่ตัวเองเคย review
+// Staff      → ทั้งหมดที่ Faculty Com เคยตัดสินแล้ว
 // GET /api/pre-t3/history?status=Approved|Rejected&page=1&limit=20
 // -------------------------------------------------------
 router.get(
   '/history',
   requireAuth,
-  requireRole('Supervisor'),
-  PreT3Controller.getAdvisorHistory
+  requireRole('Supervisor', 'Staff'),
+  PreT3Controller.getHistory
 );
 
 // -------------------------------------------------------
