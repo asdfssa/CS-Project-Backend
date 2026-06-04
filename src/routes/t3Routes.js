@@ -119,18 +119,6 @@ router.patch(
 );
 
 // -------------------------------------------------------
-// Staff บันทึกผลจาก Grad School (หลังได้รับอีเมลตอบกลับ)
-// PATCH /api/t3/:id/grad-school-review
-// Body: { action: 'approve'|'reject', approved_by_email?, remark? }
-// -------------------------------------------------------
-router.patch(
-  '/:id/grad-school-review',
-  requireAuth,
-  requireRole('Staff'),
-  T3Controller.gradSchoolReview
-);
-
-// -------------------------------------------------------
 // นิสิตยกเลิกคำขอของตัวเอง (Pending หรือ Rejected เท่านั้น)
 // PATCH /api/t3/:id/cancel
 // -------------------------------------------------------

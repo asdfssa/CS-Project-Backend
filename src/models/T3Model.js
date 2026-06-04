@@ -346,16 +346,24 @@ class T3Model {
       approved_at:  now,
     };
 
-    // ถ้า faculty approve → overall ยังเป็น Pending (รอ Grad School)
-    // ถ้า faculty reject  → overall = Rejected
-    const newOverallStatus = action === 'reject' ? 'Rejected' : 'Pending';
+    // faculty approve/reject = ผลสุดท้าย (เจ้าหน้าที่รวมผล Grad School มาแล้ว)
+    const newOverallStatus = status; // 'Approved' หรือ 'Rejected'
+
+    // auto-fill grad_school_approval ให้ตรงกับผล faculty เพื่อ consistency ของ DB
+    const gradSchoolApproval = {
+      status,
+      remark:            remark || null,
+      approved_by_email: null,
+      approved_at:       now,
+    };
 
     await db.query(
       `UPDATE journal_watch.t3_requests
-          SET faculty_com_approval = ?,
-              overall_status       = ?
+          SET faculty_com_approval  = ?,
+              grad_school_approval  = ?,
+              overall_status        = ?
         WHERE t3_id = ?`,
-      [JSON.stringify(facultyComApproval), newOverallStatus, t3Id]
+      [JSON.stringify(facultyComApproval), JSON.stringify(gradSchoolApproval), newOverallStatus, t3Id]
     );
 
     return { newOverallStatus, facultyApproved: action === 'approve' };

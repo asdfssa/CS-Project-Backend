@@ -354,8 +354,8 @@ class T3Controller {
       const articleTitle = row.paper_and_research_details?.title_english || row.paper_and_research_details?.title_thai || '-';
 
       if (action === 'approve') {
-        // Faculty approve → แจ้งนิสิตว่าส่งเรื่องต่อ Grad School แล้ว
-        await MailService.sendT3Notification(student.msu_mail, 'faculty_approved', {
+        // ผลสุดท้าย: อนุมัติ → แจ้งนิสิตว่า T3 ผ่านแล้ว เสร็จสิ้นกระบวนการ
+        await MailService.sendT3Notification(student.msu_mail, 'grad_school_approved', {
           studentName: `${student.first_name} ${student.last_name}`,
           journalName,
           articleTitle,
@@ -364,8 +364,8 @@ class T3Controller {
           meetingDate: meeting_date,
         });
       } else {
-        // Faculty reject → แจ้งนิสิตว่าถูกปฏิเสธ
-        await MailService.sendT3Notification(student.msu_mail, 'faculty_rejected', {
+        // ผลสุดท้าย: ปฏิเสธ → แจ้งนิสิตว่าไม่ผ่าน
+        await MailService.sendT3Notification(student.msu_mail, 'grad_school_rejected', {
           studentName: `${student.first_name} ${student.last_name}`,
           journalName,
           articleTitle,
@@ -377,64 +377,12 @@ class T3Controller {
       return res.json({
         success: true,
         message: action === 'approve'
-          ? 'บันทึกมติ Faculty Com เรียบร้อย รอผลจาก Grad School'
+          ? 'อนุมัติ T3 เรียบร้อย — เสร็จสิ้นกระบวนการ'
           : 'ปฏิเสธ T3 เรียบร้อย',
         data: { overall_status: result.newOverallStatus },
       });
     } catch (err) {
       return serverError(res, err, 'T3Controller.facultyReview');
-    }
-  }
-
-  // ============================================================
-  // PATCH /api/t3/:id/grad-school-review
-  // Role: Staff
-  // Body: { action, approved_by_email, remark? }
-  // Staff บันทึกผลหลังได้รับอีเมลตอบกลับจาก researchpublication@msu.ac.th
-  // ============================================================
-  static async gradSchoolReview(req, res) {
-    try {
-      const t3Id = parseInt(req.params.id);
-      const { action, approved_by_email, remark } = req.body;
-
-      if (!['approve', 'reject'].includes(action)) {
-        return res.status(400).json({ success: false, code: 'INVALID_ACTION', message: 'action ต้องเป็น approve หรือ reject' });
-      }
-
-      const row = await T3Model.findById(t3Id);
-      if (!row) return res.status(404).json({ success: false, code: 'NOT_FOUND', message: 'ไม่พบ T3 นี้' });
-
-      // Faculty Com ต้อง approve ก่อน
-      if (row.faculty_com_approval?.status !== 'Approved') {
-        return res.status(400).json({ success: false, code: 'FACULTY_NOT_APPROVED', message: 'คณะกรรมการบัณฑิตศึกษายังไม่อนุมัติ' });
-      }
-      if (row.overall_status !== 'Pending') {
-        return res.status(400).json({ success: false, code: 'INVALID_STATE', message: `T3 นี้อยู่ในสถานะ ${row.overall_status} แล้ว` });
-      }
-
-      const result = await T3Model.gradSchoolReview(t3Id, action, approved_by_email, remark);
-
-      // แจ้งนิสิตผลสุดท้าย
-      const student    = await UserModel.findById(row.student_id);
-      const journalName = row.journal_snapshot?.journal_name || '-';
-      const articleTitle = row.paper_and_research_details?.title_english || row.paper_and_research_details?.title_thai || '-';
-
-      const event = action === 'approve' ? 'grad_school_approved' : 'grad_school_rejected';
-      await MailService.sendT3Notification(student.msu_mail, event, {
-        studentName: `${student.first_name} ${student.last_name}`,
-        journalName,
-        articleTitle,
-        t3Id,
-        remark,
-      });
-
-      return res.json({
-        success: true,
-        message: action === 'approve' ? 'T3 ได้รับการอนุมัติจาก Grad School เรียบร้อย' : 'T3 ถูกปฏิเสธโดย Grad School',
-        data: { overall_status: result.newOverallStatus },
-      });
-    } catch (err) {
-      return serverError(res, err, 'T3Controller.gradSchoolReview');
     }
   }
 
