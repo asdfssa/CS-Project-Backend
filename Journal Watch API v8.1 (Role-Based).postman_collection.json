@@ -1295,6 +1295,46 @@
               "response": []
             },
             {
+              "name": "ประวัติการอนุมัติ/ปฏิเสธ Pre-T3 ของตัวเอง",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/pre-t3/history?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "pre-t3",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "Approved",
+                      "description": "Approved | Rejected (ถ้าไม่ระบุ = ทั้งหมด)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Advisor ดูประวัติที่ตัวเองเคยอนุมัติหรือปฏิเสธแล้ว\nFilter: ?status=Approved หรือ ?status=Rejected (ไม่ระบุ = ทั้งหมด)\nรองรับ pagination: page, limit"
+              },
+              "response": []
+            },
+            {
               "name": "อนุมัติ Pre-T3",
               "request": {
                 "method": "PATCH",
@@ -1416,6 +1456,46 @@
                     "1"
                   ]
                 }
+              },
+              "response": []
+            },
+            {
+              "name": "ประวัติการอนุมัติ/ปฏิเสธ T3 ของตัวเอง",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/t3/history?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "t3",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "Approved",
+                      "description": "Approved | Rejected (ถ้าไม่ระบุ = ทั้งหมด)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Advisor ดูประวัติที่ตัวเองเคยอนุมัติหรือปฏิเสธ T3 แล้ว\nFilter: ?status=Approved หรือ ?status=Rejected (ไม่ระบุ = ทั้งหมด)\nรองรับ pagination: page, limit"
               },
               "response": []
             },

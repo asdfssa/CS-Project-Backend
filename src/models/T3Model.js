@@ -166,6 +166,57 @@ class T3Model {
   }
 
   /**
+   * ดึงประวัติที่ Advisor คนนี้เคยอนุมัติ/ปฏิเสธแล้ว
+   * @param {number} advisorId
+   * @param {object} opts - { status: 'Approved'|'Rejected'|null, page, limit }
+   */
+  static async findReviewedByAdvisor(advisorId, { status = null, page = 1, limit = 20 } = {}) {
+    const offset = (page - 1) * limit;
+
+    const statusCondition = status
+      ? `AND (
+          (t.adv_user_id = ? AND t.adv_status = ?)
+          OR (t.co1_user_id = ? AND t.co1_status = ?)
+          OR (t.co2_user_id = ? AND t.co2_status = ?)
+        )`
+      : `AND (
+          (t.adv_user_id = ? AND t.adv_status IN ('Approved','Rejected'))
+          OR (t.co1_user_id = ? AND t.co1_status IN ('Approved','Rejected'))
+          OR (t.co2_user_id = ? AND t.co2_status IN ('Approved','Rejected'))
+        )`;
+
+    const params = status
+      ? [advisorId, status, advisorId, status, advisorId, status]
+      : [advisorId, advisorId, advisorId];
+
+    const [rows] = await db.query(
+      `SELECT t.t3_id, t.pre_t3_id, t.issn, t.overall_status,
+              t.journal_snapshot, t.paper_and_research_details, t.publication_details,
+              t.advisor_approval, t.co_advisor_1_approval, t.co_advisor_2_approval,
+              t.faculty_com_approval, t.grad_school_approval,
+              t.created_at, t.updated_at,
+              u.first_name, u.last_name, u.msu_mail
+         FROM journal_watch.t3_requests t
+         JOIN journal_watch.users u ON u.user_id = t.student_id
+        WHERE 1=1
+          ${statusCondition}
+        ORDER BY t.updated_at DESC
+        LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    const [countRows] = await db.query(
+      `SELECT COUNT(*) AS total
+         FROM journal_watch.t3_requests t
+        WHERE 1=1
+          ${statusCondition}`,
+      params
+    );
+
+    return { rows, total: countRows[0].total };
+  }
+
+  /**
    * ดึงรายการที่ advisor approve ครบแล้ว รอ Faculty Com
    */
   static async findPendingForFaculty() {

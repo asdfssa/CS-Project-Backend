@@ -652,6 +652,35 @@ class T3Controller {
   }
 
   // ============================================================
+  // GET /api/t3/history
+  // Role: Supervisor — ดูประวัติที่ตัวเองเคยอนุมัติ/ปฏิเสธแล้ว
+  // Query: ?status=Approved|Rejected  ?page=1  ?limit=20
+  // ============================================================
+  static async getAdvisorHistory(req, res) {
+    try {
+      const advisorId = req.user.sub;
+      const status    = ['Approved', 'Rejected'].includes(req.query.status) ? req.query.status : null;
+      const page      = Math.max(1, parseInt(req.query.page)  || 1);
+      const limit     = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
+
+      const { rows, total } = await T3Model.findReviewedByAdvisor(advisorId, { status, page, limit });
+
+      return res.json({
+        success: true,
+        data: {
+          items:      rows.map(r => T3Controller._formatRow(r)),
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      });
+    } catch (err) {
+      return serverError(res, err, 'T3Controller.getAdvisorHistory');
+    }
+  }
+
+  // ============================================================
   // Helper
   // ============================================================
   static _formatRow(row) {
