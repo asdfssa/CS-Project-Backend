@@ -2353,6 +2353,30 @@
               "response": []
             },
             {
+              "name": "ดูไฟล์หลักฐาน",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/unwanted-journals/1/evidence",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "unwanted-journals",
+                    "1",
+                    "evidence"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
               "name": "เพิ่มวารสาร (Single)",
               "request": {
                 "method": "POST",
@@ -2360,20 +2384,44 @@
                   {
                     "key": "Authorization",
                     "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
                   }
                 ],
                 "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"journal_name\": \"Predatory Journal\",\n  \"issn\": \"0000-0000\",\n  \"publisher\": \"Unknown Publisher\",\n  \"note\": \"วารสารล่า\",\n  \"recorded_date\": \"2026-01-01\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "journal_name",
+                      "value": "Predatory Journal",
+                      "type": "text"
+                    },
+                    {
+                      "key": "issn",
+                      "value": "0000-0000",
+                      "type": "text"
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "Unknown Publisher",
+                      "type": "text"
+                    },
+                    {
+                      "key": "note",
+                      "value": "วารสารล่า — ไม่ผ่านการ peer review จริง",
+                      "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
+                      "type": "text"
+                    },
+                    {
+                      "key": "recorded_date",
+                      "value": "2026-01-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "evidence_file",
+                      "type": "file",
+                      "description": "ไฟล์หลักฐาน (PDF/JPG/PNG/WEBP, max 10 MB) — ไม่บังคับ",
+                      "src": []
                     }
-                  }
+                  ]
                 },
                 "url": {
                   "raw": "{{base_url}}/unwanted-journals/single",
@@ -2430,15 +2478,36 @@
                   {
                     "key": "Authorization",
                     "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
                   }
                 ],
                 "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"note\": \"อัปเดตหมายเหตุ\",\n  \"publisher\": \"สำนักพิมพ์ใหม่\"\n}"
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "note",
+                      "value": "อัปเดตหมายเหตุ",
+                      "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
+                      "type": "text"
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "สำนักพิมพ์ใหม่",
+                      "type": "text"
+                    },
+                    {
+                      "key": "evidence_file",
+                      "type": "file",
+                      "description": "ไฟล์หลักฐานใหม่ (แทนไฟล์เดิม, PDF/JPG/PNG/WEBP) — ไม่บังคับ",
+                      "src": []
+                    },
+                    {
+                      "key": "clear_evidence",
+                      "value": "true",
+                      "description": "ส่ง true เพื่อลบไฟล์หลักฐานที่มีอยู่ (ไม่ต้องส่งถ้าแนบไฟล์ใหม่)",
+                      "type": "text",
+                      "disabled": true
+                    }
+                  ]
                 },
                 "url": {
                   "raw": "{{base_url}}/unwanted-journals/1",
@@ -3686,6 +3755,30 @@
               "response": []
             },
             {
+              "name": "ดูไฟล์หลักฐาน",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/unwanted-journals/1/evidence",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "unwanted-journals",
+                    "1",
+                    "evidence"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
               "name": "เพิ่มวารสาร (Single)",
               "request": {
                 "method": "POST",
@@ -3693,20 +3786,44 @@
                   {
                     "key": "Authorization",
                     "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
                   }
                 ],
                 "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"journal_name\": \"Predatory Journal\",\n  \"issn\": \"0000-0000\",\n  \"publisher\": \"Unknown\",\n  \"note\": \"หมายเหตุ\",\n  \"recorded_date\": \"2026-01-01\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "journal_name",
+                      "value": "Predatory Journal",
+                      "type": "text"
+                    },
+                    {
+                      "key": "issn",
+                      "value": "0000-0000",
+                      "type": "text"
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "Unknown",
+                      "type": "text"
+                    },
+                    {
+                      "key": "note",
+                      "value": "หมายเหตุ",
+                      "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
+                      "type": "text"
+                    },
+                    {
+                      "key": "recorded_date",
+                      "value": "2026-01-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "evidence_file",
+                      "type": "file",
+                      "description": "ไฟล์หลักฐาน (PDF/JPG/PNG/WEBP, max 10 MB) — ไม่บังคับ",
+                      "src": []
                     }
-                  }
+                  ]
                 },
                 "url": {
                   "raw": "{{base_url}}/unwanted-journals/single",
@@ -3763,15 +3880,36 @@
                   {
                     "key": "Authorization",
                     "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
                   }
                 ],
                 "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"note\": \"อัปเดต\",\n  \"publisher\": \"สำนักพิมพ์ใหม่\"\n}"
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "note",
+                      "value": "อัปเดต",
+                      "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
+                      "type": "text"
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "สำนักพิมพ์ใหม่",
+                      "type": "text"
+                    },
+                    {
+                      "key": "evidence_file",
+                      "type": "file",
+                      "description": "ไฟล์หลักฐานใหม่ (แทนไฟล์เดิม, PDF/JPG/PNG/WEBP) — ไม่บังคับ",
+                      "src": []
+                    },
+                    {
+                      "key": "clear_evidence",
+                      "value": "true",
+                      "description": "ส่ง true เพื่อลบไฟล์หลักฐานที่มีอยู่ (ไม่ต้องส่งถ้าแนบไฟล์ใหม่)",
+                      "type": "text",
+                      "disabled": true
+                    }
+                  ]
                 },
                 "url": {
                   "raw": "{{base_url}}/unwanted-journals/1",
