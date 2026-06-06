@@ -2484,20 +2484,43 @@
                   "mode": "formdata",
                   "formdata": [
                     {
+                      "key": "journal_name",
+                      "value": "",
+                      "description": "ชื่อวารสาร (ห้ามเป็นค่าว่าง ถ้าส่ง)",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "issn",
+                      "value": "",
+                      "description": "เลข ISSN ของวารสาร",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "สำนักพิมพ์ใหม่",
+                      "description": "ชื่อสำนักพิมพ์",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
                       "key": "note",
                       "value": "อัปเดตหมายเหตุ",
                       "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
                       "type": "text"
                     },
                     {
-                      "key": "publisher",
-                      "value": "สำนักพิมพ์ใหม่",
-                      "type": "text"
+                      "key": "recorded_date",
+                      "value": "",
+                      "description": "วันที่บันทึก (YYYY-MM-DD)",
+                      "type": "text",
+                      "disabled": true
                     },
                     {
                       "key": "evidence_file",
                       "type": "file",
-                      "description": "ไฟล์หลักฐานใหม่ (แทนไฟล์เดิม, PDF/JPG/PNG/WEBP) — ไม่บังคับ",
+                      "description": "ไฟล์หลักฐานใหม่ (แทนไฟล์เดิม, PDF/JPG/PNG/WEBP, max 10 MB) — ไม่บังคับ",
                       "src": []
                     },
                     {
@@ -3886,20 +3909,43 @@
                   "mode": "formdata",
                   "formdata": [
                     {
+                      "key": "journal_name",
+                      "value": "",
+                      "description": "ชื่อวารสาร (ห้ามเป็นค่าว่าง ถ้าส่ง)",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "issn",
+                      "value": "",
+                      "description": "เลข ISSN ของวารสาร",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "สำนักพิมพ์ใหม่",
+                      "description": "ชื่อสำนักพิมพ์",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
                       "key": "note",
                       "value": "อัปเดต",
                       "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
                       "type": "text"
                     },
                     {
-                      "key": "publisher",
-                      "value": "สำนักพิมพ์ใหม่",
-                      "type": "text"
+                      "key": "recorded_date",
+                      "value": "",
+                      "description": "วันที่บันทึก (YYYY-MM-DD)",
+                      "type": "text",
+                      "disabled": true
                     },
                     {
                       "key": "evidence_file",
                       "type": "file",
-                      "description": "ไฟล์หลักฐานใหม่ (แทนไฟล์เดิม, PDF/JPG/PNG/WEBP) — ไม่บังคับ",
+                      "description": "ไฟล์หลักฐานใหม่ (แทนไฟล์เดิม, PDF/JPG/PNG/WEBP, max 10 MB) — ไม่บังคับ",
                       "src": []
                     },
                     {
