@@ -18,6 +18,9 @@ router.get('/', UnwantedJournalController.getAll);
 // ตรวจสอบ ISSN ก่อนกดตรวจสอบ (Student, Supervisor, Staff, Admin, SuperAdmin)
 router.get('/check/:issn', UnwantedJournalController.checkByIssn);
 
+// ดาวน์โหลด/ดูไฟล์หลักฐาน
+router.get('/:id/evidence', UnwantedJournalController.getEvidenceFile);
+
 // เฉพาะ Admin, SuperAdmin, Staff แก้ได้
 router.post('/single',  requireRole('Admin', 'SuperAdmin', 'Staff'), UnwantedJournalController.createOne);
 router.post('/import',  requireRole('Admin', 'SuperAdmin', 'Staff'), UnwantedJournalController.importCsv);

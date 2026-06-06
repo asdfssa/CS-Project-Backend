@@ -5,8 +5,40 @@
  */
 const db = require('../config/database');
 const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { parse } = require('csv-parse/sync');
 const { serverError } = require('../utils/errorResponse');
+
+// -------------------------------------------------------
+// Multer config สำหรับ evidence file (PDF, JPG, PNG, WEBP)
+// บันทึกลง uploads/unwanted/evidence/
+// -------------------------------------------------------
+const EVIDENCE_ALLOWED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+
+const evidenceStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(process.cwd(), 'uploads', 'unwanted', 'evidence');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}_${safeName}`);
+  },
+});
+
+const uploadEvidence = multer({
+  storage: evidenceStorage,
+  fileFilter: (req, file, cb) => {
+    if (EVIDENCE_ALLOWED_MIME.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('ประเภทไฟล์ไม่ถูกต้อง รองรับเฉพาะ PDF, JPG, PNG, WEBP เท่านั้น'), false);
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 },
+}).single('evidence_file');
 
 class UnwantedJournalController {
 
@@ -101,44 +133,62 @@ class UnwantedJournalController {
 
   // ============================================================
   // POST /api/admin/unwanted-journals/single
-  // Body: { issn?, journal_name, publisher?, note?, recorded_date }
+  // Content-Type: multipart/form-data
+  // Fields: issn?, journal_name, publisher?, note?, recorded_date
+  // File:   evidence_file? (PDF/JPG/PNG/WEBP, max 10 MB)
   // ============================================================
   static async createOne(req, res, next) {
-    try {
-      const { issn, journal_name, publisher, note, recorded_date } = req.body;
-
-      if (!journal_name?.trim())
-        return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อวารสาร' });
-      if (!recorded_date)
-        return res.status(400).json({ success: false, message: 'กรุณาระบุวันที่บันทึก' });
-
-      // เช็คซ้ำด้วย issn (ถ้ามี)
-      if (issn?.trim()) {
-        const [dup] = await db.query(
-          `SELECT unwanted_id FROM journal_watch.msu_unwanted_journals
-           WHERE issn = ? AND deleted_at IS NULL`,
-          [issn.trim()]
-        );
-        if (dup.length)
-          return res.status(400).json({ success: false, message: `ISSN ${issn} มีอยู่ในรายการแล้ว` });
+    uploadEvidence(req, res, async (err) => {
+      if (err) {
+        const status = err.code === 'LIMIT_FILE_SIZE' ? 400 : 400;
+        return res.status(status).json({ success: false, message: err.message });
       }
 
-      await db.query(
-        `INSERT INTO journal_watch.msu_unwanted_journals
-           (issn, journal_name, publisher, note, recorded_date, created_by)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          issn?.trim() || null,
-          journal_name.trim(),
-          publisher?.trim() || null,
-          note?.trim() || null,
-          recorded_date,
-          req.user.sub,
-        ]
-      );
+      try {
+        const { issn, journal_name, publisher, note, recorded_date } = req.body;
 
-      return res.status(201).json({ success: true, message: 'เพิ่มวารสารเรียบร้อยแล้ว' });
-    } catch (err) { next(err); }
+        if (!journal_name?.trim())
+          return res.status(400).json({ success: false, message: 'กรุณาระบุชื่อวารสาร' });
+        if (!recorded_date)
+          return res.status(400).json({ success: false, message: 'กรุณาระบุวันที่บันทึก' });
+
+        if (issn?.trim()) {
+          const [dup] = await db.query(
+            `SELECT unwanted_id FROM journal_watch.msu_unwanted_journals
+             WHERE issn = ? AND deleted_at IS NULL`,
+            [issn.trim()]
+          );
+          if (dup.length) {
+            if (req.file) fs.unlinkSync(req.file.path);
+            return res.status(400).json({ success: false, message: `ISSN ${issn} มีอยู่ในรายการแล้ว` });
+          }
+        }
+
+        const evidenceFilePath = req.file
+          ? path.relative(process.cwd(), req.file.path).replace(/\\/g, '/')
+          : null;
+
+        await db.query(
+          `INSERT INTO journal_watch.msu_unwanted_journals
+             (issn, journal_name, publisher, note, evidence_file_path, recorded_date, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            issn?.trim() || null,
+            journal_name.trim(),
+            publisher?.trim() || null,
+            note?.trim() || null,
+            evidenceFilePath,
+            recorded_date,
+            req.user.sub,
+          ]
+        );
+
+        return res.status(201).json({ success: true, message: 'เพิ่มวารสารเรียบร้อยแล้ว' });
+      } catch (err2) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        next(err2);
+      }
+    });
   }
 
   // ============================================================
@@ -237,41 +287,106 @@ class UnwantedJournalController {
 
   // ============================================================
   // PATCH /api/admin/unwanted-journals/:id
-  // Body: { issn?, journal_name?, publisher?, note?, recorded_date? }
+  // Content-Type: multipart/form-data
+  // Fields: issn?, journal_name?, publisher?, note?, recorded_date?,
+  //         clear_evidence? (= "true" เพื่อลบไฟล์หลักฐานที่มีอยู่)
+  // File:   evidence_file? (อัปโหลดไฟล์ใหม่แทนไฟล์เดิม)
   // ============================================================
   static async updateOne(req, res, next) {
+    uploadEvidence(req, res, async (err) => {
+      if (err) {
+        return res.status(400).json({ success: false, message: err.message });
+      }
+
+      try {
+        const { id } = req.params;
+        const [target] = await db.query(
+          `SELECT * FROM journal_watch.msu_unwanted_journals
+           WHERE unwanted_id = ? AND deleted_at IS NULL`,
+          [id]
+        );
+        if (!target.length) {
+          if (req.file) fs.unlinkSync(req.file.path);
+          return res.status(404).json({ success: false, message: 'ไม่พบวารสาร' });
+        }
+
+        const cur = target[0];
+        const body = req.body;
+
+        const merged = {
+          issn:          body.issn          !== undefined ? body.issn?.trim() || null : cur.issn,
+          journal_name:  body.journal_name  !== undefined ? body.journal_name.trim()  : cur.journal_name,
+          publisher:     body.publisher     !== undefined ? body.publisher?.trim() || null : cur.publisher,
+          note:          body.note          !== undefined ? body.note?.trim() || null : cur.note,
+          recorded_date: body.recorded_date !== undefined ? body.recorded_date : cur.recorded_date,
+        };
+
+        if (!merged.journal_name) {
+          if (req.file) fs.unlinkSync(req.file.path);
+          return res.status(400).json({ success: false, message: 'ชื่อวารสารห้ามว่าง' });
+        }
+
+        // คำนวณ evidence_file_path ใหม่
+        let newEvidencePath = cur.evidence_file_path;
+        if (req.file) {
+          // อัปโหลดไฟล์ใหม่ → ลบไฟล์เก่าก่อน
+          if (cur.evidence_file_path) {
+            const oldPath = path.join(process.cwd(), cur.evidence_file_path);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          newEvidencePath = path.relative(process.cwd(), req.file.path).replace(/\\/g, '/');
+        } else if (body.clear_evidence === 'true') {
+          // ลบไฟล์โดยไม่อัปโหลดใหม่
+          if (cur.evidence_file_path) {
+            const oldPath = path.join(process.cwd(), cur.evidence_file_path);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+          }
+          newEvidencePath = null;
+        }
+
+        await db.query(
+          `UPDATE journal_watch.msu_unwanted_journals
+           SET issn = ?, journal_name = ?, publisher = ?, note = ?,
+               evidence_file_path = ?, recorded_date = ?
+           WHERE unwanted_id = ?`,
+          [merged.issn, merged.journal_name, merged.publisher, merged.note,
+           newEvidencePath, merged.recorded_date, id]
+        );
+
+        return res.json({ success: true, message: 'แก้ไขวารสารเรียบร้อยแล้ว' });
+      } catch (err2) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        next(err2);
+      }
+    });
+  }
+
+  // ============================================================
+  // GET /api/unwanted-journals/:id/evidence
+  // ดาวน์โหลด/ดูไฟล์หลักฐาน
+  // ทุก role ที่ login แล้วเข้าดูได้
+  // ============================================================
+  static async getEvidenceFile(req, res, next) {
     try {
       const { id } = req.params;
-      const [target] = await db.query(
-        `SELECT * FROM journal_watch.msu_unwanted_journals
+      const [rows] = await db.query(
+        `SELECT evidence_file_path FROM journal_watch.msu_unwanted_journals
          WHERE unwanted_id = ? AND deleted_at IS NULL`,
         [id]
       );
-      if (!target.length)
+
+      if (!rows.length)
         return res.status(404).json({ success: false, message: 'ไม่พบวารสาร' });
 
-      const cur = target[0];
-      const body = req.body;
+      const filePath = rows[0].evidence_file_path;
+      if (!filePath)
+        return res.status(404).json({ success: false, message: 'ไม่มีไฟล์หลักฐาน' });
 
-      const merged = {
-        issn:          body.issn          !== undefined ? body.issn?.trim() || null : cur.issn,
-        journal_name:  body.journal_name  !== undefined ? body.journal_name.trim()  : cur.journal_name,
-        publisher:     body.publisher     !== undefined ? body.publisher?.trim() || null : cur.publisher,
-        note:          body.note          !== undefined ? body.note?.trim() || null : cur.note,
-        recorded_date: body.recorded_date !== undefined ? body.recorded_date : cur.recorded_date,
-      };
+      const absPath = path.join(process.cwd(), filePath);
+      if (!fs.existsSync(absPath))
+        return res.status(404).json({ success: false, message: 'ไม่พบไฟล์บนเซิร์ฟเวอร์' });
 
-      if (!merged.journal_name)
-        return res.status(400).json({ success: false, message: 'ชื่อวารสารห้ามว่าง' });
-
-      await db.query(
-        `UPDATE journal_watch.msu_unwanted_journals
-         SET issn = ?, journal_name = ?, publisher = ?, note = ?, recorded_date = ?
-         WHERE unwanted_id = ?`,
-        [merged.issn, merged.journal_name, merged.publisher, merged.note, merged.recorded_date, id]
-      );
-
-      return res.json({ success: true, message: 'แก้ไขวารสารเรียบร้อยแล้ว' });
+      return res.sendFile(absPath);
     } catch (err) { next(err); }
   }
 
