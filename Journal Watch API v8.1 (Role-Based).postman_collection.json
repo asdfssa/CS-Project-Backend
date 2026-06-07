@@ -2016,31 +2016,6 @@
               "response": []
             },
             {
-              "name": "Approve User (Pending → Active)",
-              "request": {
-                "method": "PATCH",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{access_token}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{base_url}}/manage/users/1/approve",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "manage",
-                    "users",
-                    "1",
-                    "approve"
-                  ]
-                }
-              },
-              "response": []
-            },
-            {
               "name": "Suspend User",
               "request": {
                 "method": "PATCH",
