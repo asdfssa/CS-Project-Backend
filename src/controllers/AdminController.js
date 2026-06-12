@@ -719,6 +719,59 @@ records = parse(req.file.buffer, {
   }
 
   // ============================================================
+  // GET /api/admin/admins
+  // Query params: status, search, page, limit
+  // ============================================================
+  static async getAdmins(req, res, next) {
+    try {
+      const { status, search, page = 1, limit = 20 } = req.query;
+      const offset = (Number(page) - 1) * Number(limit);
+
+      let where = ["u.deleted_at IS NULL", "u.role IN ('Admin','SuperAdmin')"];
+      const params = [];
+
+      if (status) { where.push('u.account_status = ?'); params.push(status); }
+      if (search) {
+        where.push('(u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR u.msu_mail LIKE ?)');
+        const like = `%${search}%`;
+        params.push(like, like, like, like);
+      }
+
+      const whereSQL = where.join(' AND ');
+
+      const [[countRow]] = await db.query(
+        `SELECT COUNT(*) AS total FROM journal_watch.users u WHERE ${whereSQL}`,
+        params
+      );
+
+      const [rows] = await db.query(
+        `SELECT
+          u.user_id, u.username, u.first_name, u.last_name,
+          u.msu_mail, u.role, u.account_status,
+          u.created_at, u.last_login_at
+         FROM journal_watch.users u
+         WHERE ${whereSQL}
+         ORDER BY u.role DESC, u.created_at ASC
+         LIMIT ? OFFSET ?`,
+        [...params, Number(limit), offset]
+      );
+
+      return res.json({
+        success: true,
+        data: {
+          admins: rows,
+          pagination: {
+            total:      Number(countRow.total),
+            page:       Number(page),
+            limit:      Number(limit),
+            totalPages: Math.ceil(Number(countRow.total) / Number(limit)),
+          },
+        },
+      });
+    } catch (err) { next(err); }
+  }
+
+  // ============================================================
   // POST /api/admin/admins
   // สร้าง Admin ใหม่ (username + password)
   // Body: { username, password, first_name, last_name, msu_mail }

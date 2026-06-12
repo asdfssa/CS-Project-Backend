@@ -20,6 +20,7 @@ router.get('/stats', AdminController.getStats);
 router.get('/logs', AdminController.getLogs);
 
 // จัดการ Admin (Admin/SuperAdmin เท่านั้น)
+router.get('/admins',                AdminController.getAdmins);
 router.post('/admins',               AdminController.createAdmin);
 router.patch('/admins/:id/suspend',  AdminController.suspendAdmin);
 router.patch('/admins/:id/activate', AdminController.activateAdmin);
