@@ -22,6 +22,17 @@ router.get(
 );
 
 // -------------------------------------------------------
+// รายชื่อบุคลากร Staff (หน้าบุคลากร / ช่องทางติดต่อ)
+// GET /api/user/staff?search=...
+// -------------------------------------------------------
+router.get(
+  '/staff',
+  requireAuth,
+  requireRole(...ALL_ROLES),
+  UserController.getStaffDirectory
+);
+
+// -------------------------------------------------------
 // แก้ไขโปรไฟล์ตัวเอง
 // PATCH /api/user/profile
 // Body: { prefix?, first_name?, last_name?, phone?, facebook_id?, line_id? }

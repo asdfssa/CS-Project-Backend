@@ -6,6 +6,7 @@
  *   GET   /api/user/profile        → ดูโปรไฟล์ตัวเอง (ทุก role)
  *   PATCH /api/user/profile        → แก้ไขโปรไฟล์ตัวเอง (ทุก role)
  *                                    แก้ได้เฉพาะ: phone, facebook_id, line_id
+ *   GET   /api/user/staff          → รายชื่อบุคลากร Staff พร้อมช่องทางติดต่อ (ทุก role)
  */
 const db        = require('../config/database');
 const UserModel = require('../models/UserModel');
@@ -89,10 +90,13 @@ class UserController {
         return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', message: 'ไม่พบข้อมูลผู้ใช้' });
       }
 
-      const { phone, facebook_id, line_id } = req.body;
+      const { prefix, first_name, last_name, phone, facebook_id, line_id } = req.body;
 
       // Merge: ถ้า field ไม่ได้ส่งมา ใช้ค่าเดิม
       const merged = {
+        prefix:      prefix      !== undefined ? prefix      : user.prefix,
+        first_name:  first_name  !== undefined ? first_name  : user.first_name,
+        last_name:   last_name   !== undefined ? last_name   : user.last_name,
         phone:       phone       !== undefined ? phone       : user.phone,
         facebook_id: facebook_id !== undefined ? facebook_id : user.facebook_id,
         line_id:     line_id     !== undefined ? line_id     : user.line_id,
@@ -100,11 +104,17 @@ class UserController {
 
       await db.query(
         `UPDATE journal_watch.users
-            SET phone       = ?,
+            SET prefix      = ?,
+                first_name  = ?,
+                last_name   = ?,
+                phone       = ?,
                 facebook_id = ?,
                 line_id     = ?
           WHERE user_id = ?`,
         [
+          merged.prefix      || null,
+          merged.first_name  || null,
+          merged.last_name   || null,
           merged.phone       || null,
           merged.facebook_id || null,
           merged.line_id     || null,
@@ -114,8 +124,69 @@ class UserController {
 
       return res.json({
         success: true,
-        message: 'แก้ไขข้อมูลติดต่อเรียบร้อยแล้ว',
+        message: 'แก้ไขข้อมูลเรียบร้อยแล้ว',
       });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  // ============================================================
+  // GET /api/user/staff
+  // Role: ทุก role ที่ login แล้ว
+  // แสดงรายชื่อบุคลากร Staff พร้อมช่องทางติดต่อ (สำหรับ Frontend แสดงหน้าบุคลากร)
+  // ============================================================
+  static async getStaffDirectory(req, res, next) {
+    try {
+      const { search } = req.query;
+
+      let where = [
+        "u.role = 'Staff'",
+        "u.account_status = 'Active'",
+        'u.deleted_at IS NULL',
+      ];
+      const params = [];
+
+      if (search) {
+        where.push('(u.first_name LIKE ? OR u.last_name LIKE ? OR u.msu_mail LIKE ?)');
+        const like = `%${search}%`;
+        params.push(like, like, like);
+      }
+
+      const whereSQL = where.join(' AND ');
+
+      const [rows] = await db.query(
+        `SELECT
+           u.user_id,
+           u.prefix,
+           u.first_name,
+           u.last_name,
+           u.faculty,
+           u.department,
+           u.msu_mail,
+           u.phone,
+           u.facebook_id,
+           u.line_id
+         FROM journal_watch.users u
+         WHERE ${whereSQL}
+         ORDER BY u.first_name ASC, u.last_name ASC`,
+        params
+      );
+
+      const staff = rows.map(u => ({
+        userId:     u.user_id,
+        prefix:     u.prefix      || null,
+        firstName:  u.first_name,
+        lastName:   u.last_name,
+        faculty:    u.faculty     || null,
+        department: u.department  || null,
+        msuMail:    u.msu_mail,
+        phone:      u.phone       || null,
+        facebookId: u.facebook_id || null,
+        lineId:     u.line_id     || null,
+      }));
+
+      return res.json({ success: true, data: { staff, total: staff.length } });
     } catch (err) {
       next(err);
     }

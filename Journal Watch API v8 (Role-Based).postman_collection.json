@@ -1,11 +1,11 @@
 {
   "info": {
-    "_postman_id": "86a3b7ae-8a32-4156-ab50-713110718eb6",
+    "_postman_id": "c3bc6208-4ab9-4467-a67d-dce237f57a0e",
     "name": "Journal Watch API v8 (Role-Based)",
     "description": "จัดกลุ่ม endpoint ตาม Role: Student | Advisor | Staff | Admin",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "46105737",
-    "_collection_link": "https://go.postman.co/collection/46105737-86a3b7ae-8a32-4156-ab50-713110718eb6?source=collection_link"
+    "_collection_link": "https://go.postman.co/collection/46105737-c3bc6208-4ab9-4467-a67d-dce237f57a0e?source=collection_link"
   },
   "item": [
     {
@@ -192,6 +192,29 @@
                   "path": [
                     "user",
                     "profile"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "ดูรายชื่อบุคลากร (Staff Directory)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/user/staff",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "user",
+                    "staff"
                   ]
                 }
               },
@@ -1095,6 +1118,29 @@
                 }
               },
               "response": []
+            },
+            {
+              "name": "ดูรายชื่อบุคลากร (Staff Directory)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/user/staff",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "user",
+                    "staff"
+                  ]
+                }
+              },
+              "response": []
             }
           ]
         },
@@ -1295,6 +1341,46 @@
               "response": []
             },
             {
+              "name": "ประวัติการอนุมัติ/ปฏิเสธ Pre-T3 ของตัวเอง",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/pre-t3/history?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "pre-t3",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "Approved",
+                      "description": "Approved | Rejected (ถ้าไม่ระบุ = ทั้งหมด)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Advisor ดูประวัติที่ตัวเองเคยอนุมัติหรือปฏิเสธแล้ว\nFilter: ?status=Approved หรือ ?status=Rejected (ไม่ระบุ = ทั้งหมด)\nรองรับ pagination: page, limit"
+              },
+              "response": []
+            },
+            {
               "name": "อนุมัติ Pre-T3",
               "request": {
                 "method": "PATCH",
@@ -1416,6 +1502,46 @@
                     "1"
                   ]
                 }
+              },
+              "response": []
+            },
+            {
+              "name": "ประวัติการอนุมัติ/ปฏิเสธ T3 ของตัวเอง",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/t3/history?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "t3",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "Approved",
+                      "description": "Approved | Rejected (ถ้าไม่ระบุ = ทั้งหมด)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Advisor ดูประวัติที่ตัวเองเคยอนุมัติหรือปฏิเสธ T3 แล้ว\nFilter: ?status=Approved หรือ ?status=Rejected (ไม่ระบุ = ทั้งหมด)\nรองรับ pagination: page, limit"
               },
               "response": []
             },
@@ -1806,6 +1932,29 @@
                 }
               },
               "response": []
+            },
+            {
+              "name": "ดูรายชื่อบุคลากร (Staff Directory)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/user/staff",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "user",
+                    "staff"
+                  ]
+                }
+              },
+              "response": []
             }
           ]
         },
@@ -1930,31 +2079,6 @@
                     "manage",
                     "users",
                     "import"
-                  ]
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Approve User (Pending → Active)",
-              "request": {
-                "method": "PATCH",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{access_token}}"
-                  }
-                ],
-                "url": {
-                  "raw": "{{base_url}}/manage/users/1/approve",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "manage",
-                    "users",
-                    "1",
-                    "approve"
                   ]
                 }
               },
@@ -2273,6 +2397,30 @@
               "response": []
             },
             {
+              "name": "ดูไฟล์หลักฐาน",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/unwanted-journals/1/evidence",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "unwanted-journals",
+                    "1",
+                    "evidence"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
               "name": "เพิ่มวารสาร (Single)",
               "request": {
                 "method": "POST",
@@ -2280,20 +2428,44 @@
                   {
                     "key": "Authorization",
                     "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
                   }
                 ],
                 "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"journal_name\": \"Predatory Journal\",\n  \"issn\": \"0000-0000\",\n  \"publisher\": \"Unknown Publisher\",\n  \"note\": \"วารสารล่า\",\n  \"recorded_date\": \"2026-01-01\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "journal_name",
+                      "value": "Predatory Journal",
+                      "type": "text"
+                    },
+                    {
+                      "key": "issn",
+                      "value": "0000-0000",
+                      "type": "text"
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "Unknown Publisher",
+                      "type": "text"
+                    },
+                    {
+                      "key": "note",
+                      "value": "วารสารล่า — ไม่ผ่านการ peer review จริง",
+                      "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
+                      "type": "text"
+                    },
+                    {
+                      "key": "recorded_date",
+                      "value": "2026-01-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "evidence_file",
+                      "type": "file",
+                      "description": "ไฟล์หลักฐาน (PDF/JPG/PNG/WEBP, max 10 MB) — ไม่บังคับ",
+                      "value": null
                     }
-                  }
+                  ]
                 },
                 "url": {
                   "raw": "{{base_url}}/unwanted-journals/single",
@@ -2350,15 +2522,59 @@
                   {
                     "key": "Authorization",
                     "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
                   }
                 ],
                 "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"note\": \"อัปเดตหมายเหตุ\",\n  \"publisher\": \"สำนักพิมพ์ใหม่\"\n}"
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "journal_name",
+                      "value": "",
+                      "description": "ชื่อวารสาร (ห้ามเป็นค่าว่าง ถ้าส่ง)",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "issn",
+                      "value": "",
+                      "description": "เลข ISSN ของวารสาร",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "สำนักพิมพ์ใหม่",
+                      "description": "ชื่อสำนักพิมพ์",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "note",
+                      "value": "อัปเดตหมายเหตุ",
+                      "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
+                      "type": "text"
+                    },
+                    {
+                      "key": "recorded_date",
+                      "value": "",
+                      "description": "วันที่บันทึก (YYYY-MM-DD)",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "evidence_file",
+                      "type": "file",
+                      "description": "ไฟล์หลักฐานใหม่ (แทนไฟล์เดิม, PDF/JPG/PNG/WEBP, max 10 MB) — ไม่บังคับ",
+                      "value": null
+                    },
+                    {
+                      "key": "clear_evidence",
+                      "value": "true",
+                      "description": "ส่ง true เพื่อลบไฟล์หลักฐานที่มีอยู่ (ไม่ต้องส่งถ้าแนบไฟล์ใหม่)",
+                      "type": "text",
+                      "disabled": true
+                    }
+                  ]
                 },
                 "url": {
                   "raw": "{{base_url}}/unwanted-journals/1",
@@ -2444,6 +2660,46 @@
                     "1"
                   ]
                 }
+              },
+              "response": []
+            },
+            {
+              "name": "ประวัติการอนุมัติ/ปฏิเสธ Pre-T3 (Faculty Com)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/pre-t3/history?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "pre-t3",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "Approved",
+                      "description": "Approved | Rejected (ถ้าไม่ระบุ = ทั้งหมด)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Staff ดูประวัติ Pre-T3 ทั้งหมดที่ Faculty Com เคยตัดสินแล้ว (Approved หรือ Rejected)\nFilter: ?status=Approved|Rejected (ไม่ระบุ = ทั้งหมด)"
               },
               "response": []
             },
@@ -2573,6 +2829,46 @@
               "response": []
             },
             {
+              "name": "ประวัติการอนุมัติ/ปฏิเสธ T3 (Faculty Com)",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/t3/history?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "t3",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "Approved",
+                      "description": "Approved | Rejected (ถ้าไม่ระบุ = ทั้งหมด)",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Staff ดูประวัติ T3 ทั้งหมดที่ Faculty Com เคยตัดสินแล้ว (Approved หรือ Rejected)\nFilter: ?status=Approved|Rejected (ไม่ระบุ = ทั้งหมด)"
+              },
+              "response": []
+            },
+            {
               "name": "Faculty Com อนุมัติ T3",
               "request": {
                 "method": "PATCH",
@@ -2641,81 +2937,6 @@
                     "t3",
                     "1",
                     "faculty-review"
-                  ]
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Grad School อนุมัติ T3",
-              "request": {
-                "method": "PATCH",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"action\": \"approve\",\n  \"approved_by_email\": \"researchpublication@msu.ac.th\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                },
-                "url": {
-                  "raw": "{{base_url}}/t3/1/grad-school-review",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "t3",
-                    "1",
-                    "grad-school-review"
-                  ]
-                },
-                "description": "บันทึกผลหลังได้รับอีเมลตอบกลับจาก Grad School"
-              },
-              "response": []
-            },
-            {
-              "name": "Grad School ปฏิเสธ T3",
-              "request": {
-                "method": "PATCH",
-                "header": [
-                  {
-                    "key": "Authorization",
-                    "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
-                  }
-                ],
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"action\": \"reject\",\n  \"approved_by_email\": \"researchpublication@msu.ac.th\",\n  \"remark\": \"เอกสารไม่ครบ\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                },
-                "url": {
-                  "raw": "{{base_url}}/t3/1/grad-school-review",
-                  "host": [
-                    "{{base_url}}"
-                  ],
-                  "path": [
-                    "t3",
-                    "1",
-                    "grad-school-review"
                   ]
                 }
               },
@@ -2837,9 +3058,14 @@
                   "listen": "test",
                   "script": {
                     "exec": [
-                      "const res = pm.response.json();\nif (res.success && res.data?.otpToken) {\n  pm.collectionVariables.set('otp_token', res.data.otpToken);\n}"
+                      "const res = pm.response.json();",
+                      "if (res.success && res.data?.otpToken) {",
+                      "  pm.collectionVariables.set('otp_token', res.data.otpToken);",
+                      "}"
                     ],
-                    "type": "text/javascript"
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
                   }
                 }
               ],
@@ -2853,7 +3079,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"username\": \"superadmin123\",\n  \"password\": \"superadmin123\"\n}"
+                  "raw": "{\n  \"username\": \"admin_system\",\n  \"password\": \"Aa123456\"\n}"
                 },
                 "url": {
                   "raw": "{{base_url}}/auth/login",
@@ -2875,9 +3101,14 @@
                   "listen": "test",
                   "script": {
                     "exec": [
-                      "const res = pm.response.json();\nif (res.success && res.data?.accessToken) {\n  pm.collectionVariables.set('access_token', res.data.accessToken);\n}"
+                      "const res = pm.response.json();",
+                      "if (res.success && res.data?.accessToken) {",
+                      "  pm.collectionVariables.set('access_token', res.data.accessToken);",
+                      "}"
                     ],
-                    "type": "text/javascript"
+                    "type": "text/javascript",
+                    "packages": {},
+                    "requests": {}
                   }
                 }
               ],
@@ -2895,7 +3126,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"otpCode\": \"123456\"\n}"
+                  "raw": "{\n  \"otpCode\": \"535631\"\n}"
                 },
                 "url": {
                   "raw": "{{base_url}}/auth/verify-otp",
@@ -2961,6 +3192,29 @@
               "response": []
             },
             {
+              "name": "ดูโปรไฟล์ตัวเอง",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/user/profile",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "user",
+                    "profile"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
               "name": "Logout",
               "request": {
                 "method": "POST",
@@ -2988,6 +3242,90 @@
                     "logout"
                   ]
                 }
+              },
+              "response": []
+            },
+            {
+              "name": "Forgot Password (ขอรีเซ็ตรหัสผ่าน)",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "exec": [
+                      "const res = pm.response.json();",
+                      "if (res.success && res.data?.resetOtpToken) {",
+                      "  pm.collectionVariables.set('reset_otp_token', res.data.resetOtpToken);",
+                      "}"
+                    ],
+                    "type": "text/javascript"
+                  }
+                }
+              ],
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"admin01\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/forgot-password",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "forgot-password"
+                  ]
+                },
+                "description": "Step 1: ส่ง username → รับ OTP ทางอีเมล + resetOtpToken (Auto-save ลง collection variable)\nเฉพาะ Admin / SuperAdmin ที่ account_status = Active เท่านั้น"
+              },
+              "response": []
+            },
+            {
+              "name": "Reset Password (รีเซ็ตรหัสผ่าน)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{reset_otp_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"otpCode\": \"123456\",\n  \"newPassword\": \"NewPass@1234\",\n  \"confirmPassword\": \"NewPass@1234\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/reset-password",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "auth",
+                    "reset-password"
+                  ]
+                },
+                "description": "Step 2: ส่ง OTP (จากอีเมล) + รหัสผ่านใหม่\nHeader: Authorization: Bearer {{reset_otp_token}} (จาก Forgot Password)\nPassword rules: ≥8 ตัว, มีตัวพิมพ์ใหญ่, พิมพ์เล็ก, ตัวเลข\nสำเร็จแล้ว: sessions ทุก device จะถูก logout ทันที"
               },
               "response": []
             }
@@ -3105,6 +3443,29 @@
                     }
                   }
                 },
+                "url": {
+                  "raw": "{{base_url}}/admin/admins",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "admins"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get Admin",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
                 "url": {
                   "raw": "{{base_url}}/admin/admins",
                   "host": [
@@ -3517,6 +3878,30 @@
               "response": []
             },
             {
+              "name": "ดูไฟล์หลักฐาน",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/unwanted-journals/1/evidence",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "unwanted-journals",
+                    "1",
+                    "evidence"
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
               "name": "เพิ่มวารสาร (Single)",
               "request": {
                 "method": "POST",
@@ -3524,20 +3909,44 @@
                   {
                     "key": "Authorization",
                     "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
                   }
                 ],
                 "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"journal_name\": \"Predatory Journal\",\n  \"issn\": \"0000-0000\",\n  \"publisher\": \"Unknown\",\n  \"note\": \"หมายเหตุ\",\n  \"recorded_date\": \"2026-01-01\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "journal_name",
+                      "value": "Predatory Journal",
+                      "type": "text"
+                    },
+                    {
+                      "key": "issn",
+                      "value": "0000-0000",
+                      "type": "text"
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "Unknown",
+                      "type": "text"
+                    },
+                    {
+                      "key": "note",
+                      "value": "หมายเหตุ",
+                      "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
+                      "type": "text"
+                    },
+                    {
+                      "key": "recorded_date",
+                      "value": "2026-01-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "evidence_file",
+                      "type": "file",
+                      "description": "ไฟล์หลักฐาน (PDF/JPG/PNG/WEBP, max 10 MB) — ไม่บังคับ",
+                      "value": null
                     }
-                  }
+                  ]
                 },
                 "url": {
                   "raw": "{{base_url}}/unwanted-journals/single",
@@ -3594,15 +4003,59 @@
                   {
                     "key": "Authorization",
                     "value": "Bearer {{access_token}}"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json"
                   }
                 ],
                 "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"note\": \"อัปเดต\",\n  \"publisher\": \"สำนักพิมพ์ใหม่\"\n}"
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "journal_name",
+                      "value": "",
+                      "description": "ชื่อวารสาร (ห้ามเป็นค่าว่าง ถ้าส่ง)",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "issn",
+                      "value": "",
+                      "description": "เลข ISSN ของวารสาร",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "publisher",
+                      "value": "สำนักพิมพ์ใหม่",
+                      "description": "ชื่อสำนักพิมพ์",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "note",
+                      "value": "อัปเดต",
+                      "description": "หมายเหตุว่าทำไมถึงอยู่ใน Blacklist",
+                      "type": "text"
+                    },
+                    {
+                      "key": "recorded_date",
+                      "value": "",
+                      "description": "วันที่บันทึก (YYYY-MM-DD)",
+                      "type": "text",
+                      "disabled": true
+                    },
+                    {
+                      "key": "evidence_file",
+                      "type": "file",
+                      "description": "ไฟล์หลักฐานใหม่ (แทนไฟล์เดิม, PDF/JPG/PNG/WEBP, max 10 MB) — ไม่บังคับ",
+                      "value": null
+                    },
+                    {
+                      "key": "clear_evidence",
+                      "value": "true",
+                      "description": "ส่ง true เพื่อลบไฟล์หลักฐานที่มีอยู่ (ไม่ต้องส่งถ้าแนบไฟล์ใหม่)",
+                      "type": "text",
+                      "disabled": true
+                    }
+                  ]
                 },
                 "url": {
                   "raw": "{{base_url}}/unwanted-journals/1",
@@ -3756,6 +4209,72 @@
               "response": []
             }
           ]
+        },
+        {
+          "name": "โปรไฟล์ตัวเอง",
+          "item": [
+            {
+              "name": "ดูโปรไฟล์ตัวเอง",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/user/profile",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "user",
+                    "profile"
+                  ]
+                },
+                "description": "GET /api/user/profile\nดูโปรไฟล์ของตัวเอง (ใช้ token ของ Admin ที่ login อยู่)"
+              },
+              "response": []
+            },
+            {
+              "name": "แก้ไขโปรไฟล์ตัวเอง",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"prefix\": \"นาย\",\n  \"first_name\": \"ชื่อใหม่\",\n  \"last_name\": \"นามสกุลใหม่\",\n  \"phone\": \"0812345678\",\n  \"facebook_id\": \"facebook_username\",\n  \"line_id\": \"line_id_here\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{base_url}}/user/profile",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "user",
+                    "profile"
+                  ]
+                },
+                "description": "PATCH /api/user/profile\nแก้ไขโปรไฟล์ของตัวเอง (ใช้ token ของ Admin ที่ login อยู่)\nทุก field เป็น optional — ส่งเฉพาะที่ต้องการแก้ไข\n\nFields:\n- prefix: คำนำหน้า\n- first_name: ชื่อ\n- last_name: นามสกุล\n- phone: เบอร์โทรศัพท์\n- facebook_id: Facebook username\n- line_id: Line ID"
+              },
+              "response": []
+            }
+          ]
         }
       ]
     }
@@ -3771,6 +4290,10 @@
     },
     {
       "key": "otp_token",
+      "value": ""
+    },
+    {
+      "key": "reset_otp_token",
       "value": ""
     }
   ]
