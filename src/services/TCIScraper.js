@@ -54,8 +54,8 @@ class TCIScraper {
       await page.goto(`${TCI_BASE}/journals`, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(3000);
 
-      // ค้นหาด้วย ISSN
-      const card = await TCIScraper._searchAndFindCard(page, issn);
+      // ค้นหาด้วย ISSN — intercept API response เพื่อดึง path และ enabled
+      const { card, apiHit } = await TCIScraper._searchAndFindCard(page, issn);
       if (!card) {
         console.log(`[TCIScraper] ไม่พบวารสาร ISSN: ${issn} ใน TCI`);
         return null;
@@ -64,11 +64,20 @@ class TCIScraper {
       // ดึงข้อมูลจาก card ใน search results
       const cardData = await TCIScraper._extractFromCard(card, issn);
 
-      // ถ้ามี acronym ให้เปิด detail page เพื่อดึงข้อมูลเพิ่ม
-      if (cardData.acronym) {
-        const detailData = await TCIScraper._extractFromDetailPage(page, cardData.acronym);
-        const merged = { ...cardData, ...detailData, fetch_method: 'Scraping' };
-        // ถ้า detail page มี pISSN ให้อัพเดท issn field
+      // ใช้ path จาก API response (case-sensitive ถูกต้อง) ถ้ามี
+      const detailPath = apiHit?.path || cardData.acronym;
+      // ใช้ enabled จาก API response สำหรับ status
+      const isEnabled = apiHit ? apiHit.enabled !== false : true;
+
+      if (detailPath) {
+        const detailData = await TCIScraper._extractFromDetailPage(page, detailPath);
+        const merged = {
+          ...cardData,
+          ...detailData,
+          tci_status: isEnabled ? 'active' : 'inactive',
+          tci_inactive: !isEnabled,
+          fetch_method: 'Scraping',
+        };
         if (merged.issn_from_detail) merged.issn = merged.issn_from_detail;
         delete merged.acronym;
         delete merged.issn_from_detail;
@@ -76,7 +85,7 @@ class TCIScraper {
       }
 
       const { acronym: _a, ...rest } = cardData;
-      return { ...rest, fetch_method: 'Scraping' };
+      return { ...rest, tci_status: isEnabled ? 'active' : 'inactive', tci_inactive: !isEnabled, fetch_method: 'Scraping' };
 
     } finally {
       await browser.close();
@@ -84,6 +93,25 @@ class TCIScraper {
   }
 
   static async _searchAndFindCard(page, issn) {
+    // intercept API response จาก /api/v1/journals/search
+    let apiHit = null;
+    page.on('response', async (res) => {
+      if (res.url().includes('/api/v1/journals/search') && res.request().method() === 'POST') {
+        try {
+          const json = await res.json();
+          const hits = json?.hits || [];
+          const normalizedIssn = issn.replace(/-/g, '').toLowerCase();
+          const match = hits.find(h => {
+            const print = (h.print_issn || '').replace(/-/g, '').toLowerCase();
+            const online = (h.online_issn || '').replace(/-/g, '').toLowerCase();
+            return print === normalizedIssn || online === normalizedIssn;
+          });
+          if (match) apiHit = match;
+          else if (hits.length === 1) apiHit = hits[0];
+        } catch {}
+      }
+    });
+
     // พิมพ์ ISSN ในช่องค้นหา
     const searchInput = page.locator('input[placeholder="ค้นหาวารสาร..."]');
     await searchInput.waitFor({ state: 'visible', timeout: 10000 });
@@ -94,7 +122,7 @@ class TCIScraper {
     const appeared = await cardLocator.first().waitFor({ state: 'visible', timeout: 15000 })
       .then(() => true).catch(() => false);
 
-    if (!appeared) return null;
+    if (!appeared) return { card: null, apiHit };
 
     await page.waitForTimeout(1000);
 
@@ -109,13 +137,13 @@ class TCIScraper {
       const card = cards.nth(i);
       const metaText = await card.locator('.journal-card__meta').allInnerTexts();
       const combined = metaText.join(' ').replace(/-/g, '').toLowerCase();
-      if (combined.includes(normalizedIssn)) return card;
+      if (combined.includes(normalizedIssn)) return { card, apiHit };
     }
 
     // ถ้าหาไม่เจอจาก meta ให้ใช้ card แรก (กรณี search ให้ผลเดียว)
-    if (count === 1) return cards.first();
+    if (count === 1) return { card: cards.first(), apiHit };
 
-    return null;
+    return { card: null, apiHit };
   }
 
   static async _extractFromCard(card, issn) {
@@ -165,11 +193,17 @@ class TCIScraper {
 
     const fallbackIssn = issn.replace(/-/g, '').trim();
 
+    // ถ้า nameEN ว่างและ nameTH ไม่มีอักขระไทย แสดงว่าวารสารนี้มีแค่ชื่อ EN
+    // .journal-card__title จะแสดงชื่อ EN และ .journal-card__subtitle จะว่าง
+    const hasThai = /[฀-๿]/.test(nameTH);
+    const finalNameEN = nameEN.trim() || (!hasThai ? nameTH.trim() : '');
+    const finalNameTH = hasThai ? nameTH.trim() : null;
+
     return {
       issn: pissn || fallbackIssn,
       eissn: eissn || null,
-      journal_name: nameEN.trim() || '',
-      journal_name_th: nameTH.trim() || null,
+      journal_name: finalNameEN,
+      journal_name_th: finalNameTH,
       publisher: null,
       publisher_th: null,
       database_source: 'TCI',
@@ -213,9 +247,6 @@ class TCIScraper {
     const tierMatch = tierText.match(/(\d+)/);
     if (tierMatch) tier = parseInt(tierMatch[1]);
 
-    // Status: enabled = true unless tier badge is missing
-    const isEnabled = tier !== null;
-
     // Website: link ไปยัง "ต้นฉบับวารสาร"
     let website = null;
     const websiteLink = page.locator('a[href*="tci-thaijo.org/index.php"]').first();
@@ -224,8 +255,6 @@ class TCIScraper {
 
     return {
       tci_tier: tier,
-      tci_status: isEnabled ? 'active' : 'inactive',
-      tci_inactive: !isEnabled,
       website,
       main_area: metaMap['หมวดหมู่'] || null,
       eissn: metaMap['eISSN'] ? metaMap['eISSN'].replace(/-/g, '') : null,
