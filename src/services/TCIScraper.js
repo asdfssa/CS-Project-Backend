@@ -1,12 +1,13 @@
 /**
  * TCIScraper
  * ดึงข้อมูลวารสารจาก TCI ด้วย Web Scraping (Playwright)
- * Port จาก tci_issn_scraper.py
  * ใช้ journals_cache table เดิม (fetch_method = 'Scraping')
  */
 const { chromium } = require('playwright');
 const db = require('../config/database');
 const config = require('../config');
+
+const TCI_BASE = 'https://www.tci-thaijo.org';
 
 class TCIScraper {
 
@@ -27,7 +28,6 @@ class TCIScraper {
     // 2. Scrape จาก TCI
     const result = await TCIScraper._scrape(cleanIssn);
 
-    // ไม่พบวารสารใน TCI
     if (!result) return null;
 
     // 3. Save/Update cache
@@ -44,184 +44,192 @@ class TCIScraper {
       slowMo: config.scraper.slowMo,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
-    const context = await browser.newContext();
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    });
     const page = await context.newPage();
 
     try {
-      console.log(`[TCIScraper] เปิดหน้า TCI journal_list ISSN: ${issn}`);
-      await page.goto('https://tci-thailand.org/journal_list', {
-        waitUntil: 'domcontentloaded',
-      });
+      console.log(`[TCIScraper] เปิดหน้า TCI journals ISSN: ${issn}`);
+      await page.goto(`${TCI_BASE}/journals`, { waitUntil: 'domcontentloaded' });
       await page.waitForTimeout(3000);
 
-      await TCIScraper._searchByIssn(page, issn);
-      const data = await TCIScraper._extractTciDetails(page, issn);
+      // ค้นหาด้วย ISSN
+      const card = await TCIScraper._searchAndFindCard(page, issn);
+      if (!card) {
+        console.log(`[TCIScraper] ไม่พบวารสาร ISSN: ${issn} ใน TCI`);
+        return null;
+      }
 
-      // ไม่พบวารสารใน TCI — ไม่บันทึก cache และ return null
-      if (!data) return null;
+      // ดึงข้อมูลจาก card ใน search results
+      const cardData = await TCIScraper._extractFromCard(card, issn);
 
-      return data;
+      // ถ้ามี acronym ให้เปิด detail page เพื่อดึงข้อมูลเพิ่ม
+      if (cardData.acronym) {
+        const detailData = await TCIScraper._extractFromDetailPage(page, cardData.acronym);
+        const merged = { ...cardData, ...detailData, fetch_method: 'Scraping' };
+        // ถ้า detail page มี pISSN ให้อัพเดท issn field
+        if (merged.issn_from_detail) merged.issn = merged.issn_from_detail;
+        delete merged.acronym;
+        delete merged.issn_from_detail;
+        return merged;
+      }
+
+      const { acronym: _a, ...rest } = cardData;
+      return { ...rest, fetch_method: 'Scraping' };
 
     } finally {
       await browser.close();
     }
   }
 
-  static async _searchByIssn(page, issn) {
-    await page.waitForSelector('select.chakra-select', { timeout: 5000 });
+  static async _searchAndFindCard(page, issn) {
+    // พิมพ์ ISSN ในช่องค้นหา
+    const searchInput = page.locator('input[placeholder="ค้นหาวารสาร..."]');
+    await searchInput.waitFor({ state: 'visible', timeout: 10000 });
+    await searchInput.fill(issn);
 
-    const selects = page.locator('select.chakra-select');
-    const count = await selects.count();
+    // รอให้ journal cards โหลด (API debounce ~500ms + network)
+    const cardLocator = page.locator('.journal-card');
+    const appeared = await cardLocator.first().waitFor({ state: 'visible', timeout: 15000 })
+      .then(() => true).catch(() => false);
 
-    let target = null;
+    if (!appeared) return null;
+
+    await page.waitForTimeout(1000);
+
+    // normalize ISSN ที่ค้นหา
+    const normalizedIssn = issn.replace(/-/g, '').toLowerCase();
+
+    // หา card ที่ตรงกับ ISSN
+    const cards = cardLocator;
+    const count = await cards.count();
+
     for (let i = 0; i < count; i++) {
-      const s = selects.nth(i);
-      const hasIssn = await s.locator('option', { hasText: 'ISSN' }).count();
-      if (hasIssn > 0) {
-        target = s;
-        break;
-      }
+      const card = cards.nth(i);
+      const metaText = await card.locator('.journal-card__meta').allInnerTexts();
+      const combined = metaText.join(' ').replace(/-/g, '').toLowerCase();
+      if (combined.includes(normalizedIssn)) return card;
     }
 
-    if (!target) throw new Error('ไม่พบ select ที่มี option ISSN');
+    // ถ้าหาไม่เจอจาก meta ให้ใช้ card แรก (กรณี search ให้ผลเดียว)
+    if (count === 1) return cards.first();
 
-    await target.click();
-    await page.keyboard.press('ArrowDown');
-    await page.keyboard.press('Enter');
-
-    await page.waitForSelector("input[placeholder='Search']", { timeout: 3000 });
-    const searchInput = page.locator("input[placeholder='Search']").first();
-    await searchInput.click();
-    await searchInput.fill('');
-    await searchInput.type(issn, { delay: 50 });
-
-    const searchButton = page.locator("button:has-text('Search')").first();
-    await searchButton.click();
-
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(8000);
+    return null;
   }
 
-  static async _extractTciDetails(page, issn) {
-    // ตรวจสอบก่อนว่ามีผลลัพธ์หรือไม่ — ถ้าไม่มี return null แทน throw
-    const titleLink = page.locator("a.chakra-link[href*='journal_info']").first();
-    const found = await titleLink.waitFor({ state: 'visible', timeout: 15000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!found) {
-      console.log(`[TCIScraper] ไม่พบวารสาร ISSN: ${issn} ใน TCI`);
-      return null;
+  static async _extractFromCard(card, issn) {
+    const nameTH = await card.locator('.journal-card__title').first().innerText().catch(() => '');
+    const nameEN = await card.locator('.journal-card__subtitle').first().innerText().catch(() => '');
+
+    // meta rows: [0] = acronym (มี icon 'label'), [1] = ISSN info, [2] = date
+    const metaItems = await card.locator('.journal-card__meta').allInnerTexts();
+
+    // acronym อยู่ใน meta ที่มี material icon 'label' นำหน้า
+    // innerText ของ <i class="q-icon">label</i>JBPE จะได้ "labelJBPE"
+    // ต้องดึง text node โดยตรงเพื่อตัด icon text ออก
+    let acronym = null;
+    const metaDivs = card.locator('.journal-card__meta');
+    const metaCount = await metaDivs.count();
+    for (let i = 0; i < metaCount; i++) {
+      const textOnly = await metaDivs.nth(i).evaluate(el => {
+        return [...el.childNodes]
+          .filter(n => n.nodeType === Node.TEXT_NODE)
+          .map(n => n.textContent.trim())
+          .join('').trim();
+      });
+      if (textOnly && /^[A-Z][A-Z0-9_-]{1,15}$/i.test(textOnly)) {
+        acronym = textOnly;
+        break;
+      }
+      // กรณีที่ text อยู่ใน div ลูก (ไม่มี icon)
+      const innerDiv = metaDivs.nth(i).locator('div').first();
+      if (await innerDiv.count() > 0) continue; // meta นี้มี div ลูก = ISSN row
     }
-
-    const cardRoot = titleLink.locator(
-      "xpath=ancestor::div[contains(., 'Issues/Year')][1]"
-    );
-
-    // ===== ดึงจาก result card ก่อน (tier, issn, status) =====
 
     // Tier
     let tier = null;
-    const tierEl = cardRoot.locator('p', { hasText: 'TIER' });
-    if (await tierEl.count() > 0) {
-      const tierText = (await tierEl.first().innerText()).trim();
-      const m = tierText.match(/TIER[:\s]*(\d+)/i);
-      tier = m ? parseInt(m[1]) : null;
-    }
+    const tierText = await card.locator('.tier-badge').first().innerText().catch(() => '');
+    const tierMatch = tierText.match(/(\d+)/);
+    if (tierMatch) tier = parseInt(tierMatch[1]);
 
-    // pISSN / eISSN
-    let pissn = null;
+    // ISSN จาก meta text
     let eissn = null;
-    const issnEl = cardRoot.locator('p', { hasText: 'pISSN' });
-    if (await issnEl.count() > 0) {
-      const issnText = (await issnEl.first().innerText()).trim();
-      const mp = issnText.match(/pISSN:\s*([0-9Xx-]+)/);
-      if (mp) pissn = mp[1];
-      const me = issnText.match(/eISSN:\s*([0-9Xx-]+)/);
-      if (me) eissn = me[1];
+    let pissn = null;
+    for (const text of metaItems) {
+      const eMatch = text.match(/eISSN[:\s]*([0-9]{4}-?[0-9]{3}[0-9X])/i);
+      if (eMatch) eissn = eMatch[1].replace(/-/g, '');
+      const pMatch = text.match(/pISSN[:\s]*([0-9]{4}-?[0-9]{3}[0-9X])/i);
+      if (pMatch) pissn = pMatch[1].replace(/-/g, '');
     }
 
-    // Status
-    let status = null;
-    const statusEl = cardRoot.locator('span').filter({
-      hasText: /Active|Inactive|Ceased|Under review|Name Changed/i,
-    });
-    if (await statusEl.count() > 0) {
-      status = (await statusEl.first().innerText()).trim();
-    }
-
-    // ===== คลิกเข้า journal_info page — TCI เปิดใน new tab =====
-    const [newPage] = await Promise.all([
-      page.context().waitForEvent('page'),
-      titleLink.click(),
-    ]);
-    await newPage.waitForSelector('td.css-twjuam', { timeout: 30000 });
-
-    // Helper: ดึง value จาก label td.css-twjuam → value td.css-1u7ilek
-    const getFieldValue = async (labelText) => {
-      const rows = newPage.locator('tr.css-0');
-      const count = await rows.count();
-      for (let i = 0; i < count; i++) {
-        const row = rows.nth(i);
-        const label = row.locator('td.css-twjuam');
-        if (await label.count() === 0) continue;
-        const lt = (await label.first().innerText()).trim();
-        if (lt.toLowerCase().includes(labelText.toLowerCase())) {
-          const val = row.locator('td.css-1u7ilek');
-          if (await val.count() > 0) {
-            const v = (await val.first().innerText()).trim();
-            return v === '-' ? null : v;
-          }
-        }
-      }
-      return null;
-    };
-
-    const journalNameEng = await getFieldValue('Name (English)');
-    const journalNameTh  = await getFieldValue('Name (Local)');
-    const publisherEng   = await getFieldValue('Publisher (English)');
-    const publisherTh    = await getFieldValue('Publisher (Local)');
-    const website        = await getFieldValue('Website');
-    const abbrevEng      = await getFieldValue('Abbreviation (English)');
-    const issuePerYear   = await getFieldValue('Issues/Year');
-    const subjectArea    = await getFieldValue('Subject Area');
-    const subSubjectArea = await getFieldValue('Sub-Subject Area');
-
-    const isInactive = status ? status.toLowerCase() === 'inactive' : false;
-
-    // normalize tci_status ให้ตรงกับ API
-    // "Active" → "active", "Active (name changed)" → "name_changed", "Name Changed" → "name_changed"
-    const normalizeStatus = (s) => {
-      if (!s) return null;
-      const lower = s.toLowerCase();
-      if (lower.includes('name changed') || lower.includes('name_changed')) return 'name_changed';
-      if (lower.includes('inactive')) return 'inactive';
-      if (lower.includes('active')) return 'active';
-      if (lower.includes('ceased')) return 'ceased';
-      if (lower.includes('under review')) return 'under_review';
-      return lower.replace(/\s+/g, '_');
-    };
+    const fallbackIssn = issn.replace(/-/g, '').trim();
 
     return {
-      issn: (pissn || issn).replace(/-/g, '').trim(),
-      eissn,
-      journal_name: journalNameEng || '',
-      journal_name_th: journalNameTh,
-      publisher: publisherEng,
-      publisher_th: publisherTh,
+      issn: pissn || fallbackIssn,
+      eissn: eissn || null,
+      journal_name: nameEN.trim() || '',
+      journal_name_th: nameTH.trim() || null,
+      publisher: null,
+      publisher_th: null,
       database_source: 'TCI',
       tci_tier: tier,
-      tci_status: normalizeStatus(status),
-      tci_inactive: isInactive,
-      website,
+      tci_status: 'active',
+      tci_inactive: false,
+      website: null,
       main_area: null,
-      major_area: subjectArea,
-      minor_area: subSubjectArea,
-      abbrev_name: abbrevEng,
+      major_area: null,
+      minor_area: null,
+      abbrev_name: acronym,
+      acronym,
       volume_per_year: null,
-      issue_per_volume: issuePerYear,
+      issue_per_volume: null,
       prev_name: null,
       prev_name_th: null,
-      fetch_method: 'Scraping',
+    };
+  }
+
+  static async _extractFromDetailPage(page, acronym) {
+    await page.goto(`${TCI_BASE}/journals/${acronym}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(3000);
+
+    // รอให้ meta rows โหลด
+    await page.locator('.journal-meta-row').first().waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+
+    // ดึง meta rows ทั้งหมด (label → value)
+    const metaMap = {};
+    const rows = page.locator('.journal-meta-row');
+    const rowCount = await rows.count();
+    for (let i = 0; i < rowCount; i++) {
+      const row = rows.nth(i);
+      const label = await row.locator('.meta-label').first().innerText().catch(() => '');
+      const value = await row.locator('.text-body2').first().innerText().catch(() => '');
+      if (label) metaMap[label.trim()] = value.trim();
+    }
+
+    // Tier จาก detail page
+    let tier = null;
+    const tierText = await page.locator('.tier-badge').first().innerText().catch(() => '');
+    const tierMatch = tierText.match(/(\d+)/);
+    if (tierMatch) tier = parseInt(tierMatch[1]);
+
+    // Status: enabled = true unless tier badge is missing
+    const isEnabled = tier !== null;
+
+    // Website: link ไปยัง "ต้นฉบับวารสาร"
+    let website = null;
+    const websiteLink = page.locator('a[href*="tci-thaijo.org/index.php"]').first();
+    const wsFound = await websiteLink.waitFor({ state: 'attached', timeout: 3000 }).then(() => true).catch(() => false);
+    if (wsFound) website = await websiteLink.getAttribute('href');
+
+    return {
+      tci_tier: tier,
+      tci_status: isEnabled ? 'active' : 'inactive',
+      tci_inactive: !isEnabled,
+      website,
+      main_area: metaMap['หมวดหมู่'] || null,
+      eissn: metaMap['eISSN'] ? metaMap['eISSN'].replace(/-/g, '') : null,
+      issn_from_detail: metaMap['pISSN'] ? metaMap['pISSN'].replace(/-/g, '') : null,
     };
   }
 
@@ -308,7 +316,7 @@ class TCIScraper {
       tci_tier:         cached.tci_tier ? parseInt(cached.tci_tier) : null,
       tci_status:       cached.tci_status || null,
       tci_inactive:     cached.tci_inactive === 1,
-      main_area:        null,
+      main_area:        cached.main_area || null,
       major_area:       cached.tci_subject_area || null,
       minor_area:       cached.minor_area || null,
       volume_per_year:  null,
