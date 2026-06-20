@@ -33,32 +33,39 @@ class TCIService {
   static async _fetchFromApi(issn) {
     try {
       const response = await axios.post(
-        'https://tci-thailand.org/backend/journal/list_all_journal',
+        'https://www.tci-thaijo.org/api/v1/journals/search',
         {
-          start_item: 0,
-          offset: 10,
-          option: 'ssn',
-          search: issn,
-          status: ['active', 'name_changed', 'inactive'],
-          tiers: [],
-          area: [],
-          main_area: [],
+          q: issn,
+          enabled: true,
+          page: 1,
+          per_page: 20,
+          sort: 'date_created_desc',
         },
         {
           headers: {
             'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0',
-            'Origin': 'https://tci-thailand.org',
-            'Referer': 'https://tci-thailand.org/journal_list',
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36',
+            'Origin': 'https://www.tci-thaijo.org',
+            'Referer': 'https://www.tci-thaijo.org/journals',
           },
           timeout: 15000,
         }
       );
 
-      const journals = response.data?.journals || [];
-      if (journals.length === 0) return null;
+      const hits = response.data?.hits || [];
+      if (hits.length === 0) return null;
 
-      return TCIService._parseApiResponse(journals[0], issn);
+      // หา exact match ของ ISSN ก่อน (ทั้ง print_issn และ online_issn)
+      const normalizedIssn = issn.replace(/-/g, '').toLowerCase();
+      const exact = hits.find(j => {
+        const print = (j.print_issn || '').replace(/-/g, '').toLowerCase();
+        const online = (j.online_issn || '').replace(/-/g, '').toLowerCase();
+        return print === normalizedIssn || online === normalizedIssn;
+      });
+
+      const journal = exact || hits[0];
+      return TCIService._parseApiResponse(journal, issn);
 
     } catch (err) {
       throw new Error(`TCI API error: ${err.message}`);
@@ -66,30 +73,34 @@ class TCIService {
   }
 
   static _parseApiResponse(journal, issn) {
-    const tier = journal['tci_tier'] ? parseInt(journal['tci_tier']) : null;
-    const status = journal['status'] || null;
-    const isInactive = status === 'inactive';
+    const tier = journal['tier'] ? parseInt(journal['tier']) : null;
+    const isEnabled = journal['enabled'] !== false;
+
+    // online_issn คือ eissn, print_issn คือ issn
+    const printIssn = (journal['print_issn'] || '').replace(/-/g, '').trim();
+    const onlineIssn = (journal['online_issn'] || '').replace(/-/g, '').trim();
+    const fallbackIssn = issn.replace(/-/g, '').trim();
 
     return {
-      issn: (journal['issn'] || issn).replace(/-/g, '').trim(),
-      eissn: journal['eissn'] || null,
-      journal_name: journal['name_eng'] || journal['name_local'] || '',
-      journal_name_th: journal['name_local'] || null,
-      publisher: journal['publisher_eng'] || null,
-      publisher_th: journal['publisher_loc'] || null,
+      issn: printIssn || fallbackIssn,
+      eissn: onlineIssn || null,
+      journal_name: journal['names']?.['en_US'] || journal['names']?.['th_TH'] || '',
+      journal_name_th: journal['names']?.['th_TH'] || null,
+      publisher: null,
+      publisher_th: null,
       database_source: 'TCI',
       tci_tier: tier,
-      tci_status: status,
-      tci_inactive: isInactive,
-      website: journal['website'] || null,
-      main_area: journal['main_area'] || null,
-      major_area: journal['major_area'] || null,
-      minor_area: journal['minor_area'] || null,
-      abbrev_name: journal['abbrev_name'] || null,
-      volume_per_year: journal['volume_per_year'] || null,
-      issue_per_volume: journal['issue_per_volume'] || null,
-      prev_name: journal['prev_name'] || null,
-      prev_name_th: journal['prev_name_th'] || null,
+      tci_status: isEnabled ? 'active' : 'inactive',
+      tci_inactive: !isEnabled,
+      website: journal['journal_url'] || null,
+      main_area: journal['category'] || null,
+      major_area: null,
+      minor_area: null,
+      abbrev_name: journal['acronym'] || null,
+      volume_per_year: null,
+      issue_per_volume: null,
+      prev_name: null,
+      prev_name_th: null,
       fetch_method: 'API',
     };
   }
