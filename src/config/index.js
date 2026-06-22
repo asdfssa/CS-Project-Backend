@@ -62,10 +62,6 @@ module.exports = {
     clientId: process.env.GOOGLE_CLIENT_ID,
     allowedDomain: process.env.GOOGLE_ALLOWED_DOMAIN || 'msu.ac.th',
   },
-  turnstile: {
-    secretKey: process.env.TURNSTILE_SECRET_KEY || '',
-  },
-
   scopus: {
     apiKeys: [
       process.env.SCOPUS_API_KEY_1,
