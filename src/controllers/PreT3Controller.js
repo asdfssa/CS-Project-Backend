@@ -310,6 +310,11 @@ class PreT3Controller {
           remark,
         });
       } else if (result.allApproved) {
+        await MailService.sendPreT3Notification(student.msu_mail, 'advisor_approved', {
+          studentName: `${student.first_name} ${student.last_name}`,
+          journalName,
+          preT3Id,
+        });
         const [staffRows] = await db.query(
           `SELECT msu_mail FROM journal_watch.users WHERE role = 'Staff' AND account_status = 'Active' AND deleted_at IS NULL`
         );

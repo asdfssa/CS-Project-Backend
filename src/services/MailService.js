@@ -158,6 +158,10 @@ class MailService {
         subject: `[Journal Watch] มี T3 รอการพิจารณาจากคณะกรรมการ`,
         text: `T3 ของนิสิต ${studentName} (ID: ${t3Id})\nบทความ: ${articleTitle}\nวารสาร: ${journalName}\nอาจารย์ที่ปรึกษาอนุมัติแล้ว กรุณาเข้าสู่ระบบเพื่อพิจารณา`,
       },
+      advisor_approved: {
+        subject: `[Journal Watch] อาจารย์ที่ปรึกษาอนุมัติ T3 แล้ว — รอ Staff พิจารณา`,
+        text: `T3 ของคุณ (ID: ${t3Id})\nบทความ: ${articleTitle}\nวารสาร: ${journalName}\nอาจารย์ที่ปรึกษาทุกท่านอนุมัติเรียบร้อยแล้ว\nขณะนี้อยู่ระหว่างรอเจ้าหน้าที่คณะพิจารณา กรุณารอการแจ้งเตือนในขั้นตอนถัดไป`,
+      },
       faculty_approved: {
         subject: `[Journal Watch] T3 ผ่านมติคณะกรรมการแล้ว — รอผล Grad School`,
         text: `T3 ของคุณ (ID: ${t3Id})\nบทความ: ${articleTitle}\nผ่านมติคณะกรรมการบัณฑิตศึกษา${meetingNo ? `\nครั้งที่: ${meetingNo} วันที่: ${meetingDate}` : ''}\nขณะนี้อยู่ระหว่างการพิจารณาของบัณฑิตวิทยาลัย`,
@@ -204,8 +208,12 @@ class MailService {
         subject: `[Journal Watch] มี Pre-T3 รอการพิจารณาจากคณะกรรมการ`,
         text: `Pre-T3 ของนิสิต ${studentName} (ID: ${preT3Id})\nวารสาร: ${journalName}\nอาจารย์ที่ปรึกษาอนุมัติแล้ว กรุณาเข้าสู่ระบบเพื่อพิจารณา`,
       },
+      advisor_approved: {
+        subject: `[Journal Watch] อาจารย์ที่ปรึกษาอนุมัติ Pre-T3 แล้ว — รอ Staff พิจารณา`,
+        text: `Pre-T3 ของคุณ (ID: ${preT3Id}) สำหรับวารสาร ${journalName}\nอาจารย์ที่ปรึกษาทุกท่านอนุมัติเรียบร้อยแล้ว\nขณะนี้อยู่ระหว่างรอเจ้าหน้าที่คณะพิจารณา กรุณารอการแจ้งเตือนในขั้นตอนถัดไป`,
+      },
       faculty_approved: {
-        subject: `[Journal Watch] Pre-T3 ได้รับการอนุมัติแล้ว 🎉`,
+        subject: `[Journal Watch] Pre-T3 ได้รับการอนุมัติแล้ว`,
         text: `Pre-T3 ของคุณ (ID: ${preT3Id}) สำหรับวารสาร ${journalName}\nได้รับการอนุมัติจากคณะกรรมการบัณฑิตศึกษาแล้ว${meetingNo ? `\nครั้งที่: ${meetingNo} วันที่: ${meetingDate}` : ''}\nคุณสามารถยื่น T3 ต่อไปได้`,
       },
       faculty_rejected: {
@@ -224,6 +232,44 @@ class MailService {
       text:    tmpl.text,
       html:    MailService._buildPreT3Html(tmpl.subject, tmpl.text),
     };
+  }
+
+  // ============================================================
+  // Account Approved Notification
+  // ============================================================
+
+  /**
+   * ส่งอีเมลแจ้งเตือนเมื่อบัญชีได้รับการอนุมัติ
+   * @param {string} to        - email ปลายทาง
+   * @param {string} fullName  - ชื่อ-นามสกุล ผู้ใช้
+   */
+  static async sendAccountApproved(to, fullName) {
+    const subject = '[Journal Watch] บัญชีของคุณได้รับการอนุมัติแล้ว';
+    const text = `เรียน ${fullName}\n\nบัญชีผู้ใช้ของคุณในระบบ Journal Watch ได้รับการอนุมัติจากผู้ดูแลระบบเรียบร้อยแล้ว\nคุณสามารถเข้าสู่ระบบและเริ่มใช้งานได้ทันที\n\nหากมีข้อสงสัยกรุณาติดต่อผู้ดูแลระบบ`;
+
+    if (config.mail.mode === 'console') {
+      console.log(`\n[MailService:AccountApproved] ───────────────────────`);
+      console.log(`  To      : ${to}`);
+      console.log(`  Subject : ${subject}`);
+      console.log(`  Body    : ${text}`);
+      console.log(`────────────────────────────────────────────────────\n`);
+      return { success: true, mode: 'console' };
+    }
+
+    try {
+      const info = await transporter.sendMail({
+        from: config.mail.from,
+        to,
+        subject,
+        text,
+        html: MailService._buildPreT3Html(subject, text),
+      });
+      logger.success(`Account approved email sent to ${to}`, { messageId: info.messageId });
+      return { success: true, mode: 'smtp', messageId: info.messageId };
+    } catch (err) {
+      logger.error(`Account approved email failed: ${err.message}`, { to });
+      return { success: false, error: err.message };
+    }
   }
 
   static _buildPreT3Html(title, body) {

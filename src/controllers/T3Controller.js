@@ -293,6 +293,12 @@ class T3Controller {
           remark,
         });
       } else if (result.allApproved) {
+        await MailService.sendT3Notification(student.msu_mail, 'advisor_approved', {
+          studentName: `${student.first_name} ${student.last_name}`,
+          journalName,
+          articleTitle,
+          t3Id,
+        });
         // แจ้ง Staff ทุกคน
         const [staffRows] = await db.query(
           `SELECT msu_mail FROM journal_watch.users WHERE role = 'Staff' AND account_status = 'Active' AND deleted_at IS NULL`
