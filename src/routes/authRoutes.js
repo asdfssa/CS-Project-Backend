@@ -8,10 +8,11 @@ const { loginValidator, verifyOtpValidator, googleLoginValidator, forgotPassword
 const handleValidation = require('../middlewares/validation');
 const { requireAuth, requireOtpToken, requirePasswordResetToken } = require('../middlewares/auth');
 const { loginLimiter, googleLimiter, otpLimiter, registerLimiter, forgotPasswordLimiter } = require('../middlewares/rateLimit');
+const verifyTurnstile = require('../middlewares/turnstile');
 const router = express.Router();
 
 // Step 1: ส่ง username + password → รับ OTP token
-router.post('/login', loginLimiter, loginValidator, handleValidation, AuthController.login);
+router.post('/login', loginLimiter, verifyTurnstile, loginValidator, handleValidation, AuthController.login);
 
 // Step 2: ส่ง OTP code (พร้อม OTP token) → รับ access token + set refresh cookie
 router.post(
@@ -27,8 +28,8 @@ router.post(
 router.post('/resend-otp', otpLimiter, requireOtpToken, AuthController.resendOtp);
 
 // Google OAuth Login → รับ access token + set refresh cookie
-router.post('/google', googleLimiter, googleLoginValidator, handleValidation, AuthController.googleLogin);
-router.post('/register-staff', registerLimiter, googleLoginValidator, handleValidation, AuthController.registerStaff);
+router.post('/google', googleLimiter, verifyTurnstile, googleLoginValidator, handleValidation, AuthController.googleLogin);
+router.post('/register-staff', registerLimiter, verifyTurnstile, googleLoginValidator, handleValidation, AuthController.registerStaff);
 // Refresh access token ด้วย refresh token จาก cookie
 router.post('/refresh', AuthController.refresh);
 
