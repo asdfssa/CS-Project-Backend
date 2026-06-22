@@ -297,6 +297,12 @@ class T3Model {
     let co1Approval     = applyReview(row.co_advisor_1_approval);
     let co2Approval     = applyReview(row.co_advisor_2_approval);
 
+    // ถ้าอาจารย์หลักอนุมัติ → auto-approve co-advisors ที่ยัง Pending
+    if (action === 'approve' && String(row.advisor_approval.user_id) === String(advisorId)) {
+      if (co1Approval.status === 'Pending') co1Approval = { ...co1Approval, status: 'Approved', approved_at: now };
+      if (co2Approval.status === 'Pending') co2Approval = { ...co2Approval, status: 'Approved', approved_at: now };
+    }
+
     const anyRejected = [advisorApproval, co1Approval, co2Approval]
       .some(s => s.status === 'Rejected');
 

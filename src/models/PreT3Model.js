@@ -266,6 +266,12 @@ class PreT3Model {
     co1Approval     = applyReview(co1Approval);
     co2Approval     = applyReview(co2Approval);
 
+    // ถ้าอาจารย์หลักอนุมัติ → auto-approve co-advisors ที่ยัง Pending
+    if (action === 'approve' && String(row.advisor_approval.user_id) === String(advisorId)) {
+      if (co1Approval.status === 'Pending') co1Approval = { ...co1Approval, status: 'Approved', approved_at: now };
+      if (co2Approval.status === 'Pending') co2Approval = { ...co2Approval, status: 'Approved', approved_at: now };
+    }
+
     // ตรวจว่ามีใคร Rejected ไหม → reject ทั้ง request
     const anyRejected = [advisorApproval, co1Approval, co2Approval]
       .some(s => s.status === 'Rejected');
