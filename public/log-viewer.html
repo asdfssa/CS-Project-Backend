@@ -50,7 +50,7 @@
             align-items: center;
         }
 
-        select, button {
+        select, button, input {
             padding: 0.5rem 1rem;
             border: 1px solid #555;
             background: #3d3d3d;
@@ -59,6 +59,8 @@
             cursor: pointer;
             transition: all 0.3s;
         }
+
+        input { cursor: text; }
 
         select:hover, button:hover {
             background: #4d4d3d;
@@ -207,6 +209,10 @@
         <div class="title">📊 Console Logs</div>
         <div class="controls">
             <div class="filter-group">
+                <label for="tokenInput">Token:</label>
+                <input type="password" id="tokenInput" placeholder="Bearer access token (Admin/SuperAdmin)" style="width:260px;">
+            </div>
+            <div class="filter-group">
                 <label for="levelFilter">Filter:</label>
                 <select id="levelFilter">
                     <option value="ALL">All Levels</option>
@@ -259,27 +265,41 @@
 
     <script>
         let autoRefreshInterval;
-        
+
+        // /api/v3/logs ตอนนี้ต้อง login เป็น Admin/SuperAdmin ก่อนถึงจะดูได้ —
+        // เก็บ access token ไว้ใน localStorage ของหน้านี้ (ไม่ใช่ระบบ login เต็มรูปแบบ
+        // แค่ให้แปะ token ที่ได้จาก test console/Postman มาใช้ดู log ได้)
+        const tokenInput = document.getElementById('tokenInput');
+        tokenInput.value = localStorage.getItem('jw_log_viewer_token') || '';
+        tokenInput.addEventListener('change', () => {
+            localStorage.setItem('jw_log_viewer_token', tokenInput.value);
+        });
+        function authHeaders() {
+            return tokenInput.value ? { 'Authorization': 'Bearer ' + tokenInput.value } : {};
+        }
+
         async function fetchLogs() {
             try {
                 const level = document.getElementById('levelFilter').value;
                 const limit = document.getElementById('limitFilter').value;
-                
-                const response = await fetch(`/api/v3/logs?level=${level}&limit=${limit}`);
+
+                const response = await fetch(`/api/v3/logs?level=${level}&limit=${limit}`, { headers: authHeaders() });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
-                
+
                 displayLogs(data.logs);
                 await updateStats();
             } catch (error) {
                 console.error('Error fetching logs:', error);
-                document.getElementById('logsContainer').innerHTML = 
-                    '<div class="no-logs">Error loading logs</div>';
+                document.getElementById('logsContainer').innerHTML =
+                    '<div class="no-logs">Error loading logs — ใส่ Token ของ Admin/SuperAdmin ที่ช่อง Token ด้านบนแล้วกด Refresh</div>';
             }
         }
 
         async function updateStats() {
             try {
-                const response = await fetch('/api/v3/logs/stats');
+                const response = await fetch('/api/v3/logs/stats', { headers: authHeaders() });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const stats = await response.json();
                 
                 document.getElementById('infoCount').textContent = stats.INFO;
@@ -330,7 +350,7 @@
 
         async function clearLogs() {
             try {
-                await fetch('/api/v3/logs', { method: 'DELETE' });
+                await fetch('/api/v3/logs', { method: 'DELETE', headers: authHeaders() });
                 await fetchLogs();
             } catch (error) {
                 console.error('Error clearing logs:', error);
