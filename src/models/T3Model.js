@@ -21,6 +21,7 @@
  * ในระบบ — ดู master_list.md A7)
  */
 const db = require('../config/database');
+const { slotFromApproval, fetchApprovalsMap, reviewAdvisorSlot, withTransaction } = require('./_approvalHelpers');
 
 const FILE_TYPE_TO_KEY = {
   Acceptance_Letter:   'acceptance_letter_path',
@@ -159,22 +160,6 @@ class T3Model {
     };
   }
 
-  static async _fetchApprovalsMap(t3Ids) {
-    if (!t3Ids.length) return {};
-    const [rows] = await db.query(
-      `SELECT request_id, step, approver_id, status, remark, meeting_no, meeting_date, decided_at
-         FROM request_approvals
-        WHERE request_type = 'T3' AND request_id IN (?)`,
-      [t3Ids]
-    );
-    const map = {};
-    for (const r of rows) {
-      if (!map[r.request_id]) map[r.request_id] = {};
-      map[r.request_id][r.step] = r;
-    }
-    return map;
-  }
-
   static async _fetchEvidenceFilesMap(t3Ids) {
     if (!t3Ids.length) return {};
     const [rows] = await db.query(
@@ -199,34 +184,11 @@ class T3Model {
     return map;
   }
 
-  static _slotFromApproval(approvalRow, { withMeeting = false } = {}) {
-    if (!approvalRow) {
-      return withMeeting
-        ? { status: 'Pending', meeting_no: null, meeting_date: null, remark: null, approved_at: null }
-        : { status: 'N/A', user_id: null, remark: null, approved_at: null };
-    }
-    if (withMeeting) {
-      return {
-        status:       approvalRow.status,
-        meeting_no:   approvalRow.meeting_no,
-        meeting_date: approvalRow.meeting_date,
-        remark:       approvalRow.remark,
-        approved_at:  approvalRow.decided_at,
-      };
-    }
-    return {
-      status:      approvalRow.status,
-      user_id:     approvalRow.approver_id,
-      remark:      approvalRow.remark,
-      approved_at: approvalRow.decided_at,
-    };
-  }
-
   static async _attachDerived(rows) {
     if (!rows.length) return rows;
     const ids = rows.map(r => r.t3_id);
     const [approvalsMap, evidenceMap] = await Promise.all([
-      T3Model._fetchApprovalsMap(ids),
+      fetchApprovalsMap('T3', ids),
       T3Model._fetchEvidenceFilesMap(ids),
     ]);
 
@@ -240,10 +202,10 @@ class T3Model {
         publication_details:        T3Model._buildPublicationDetails(row),
         journal_metrics:            T3Model._buildJournalMetrics(row),
         journal_evidence_files:     evidenceMap[row.t3_id],
-        advisor_approval:           T3Model._slotFromApproval(steps.Advisor),
-        co_advisor_1_approval:      T3Model._slotFromApproval(steps.Co_Advisor_1),
-        co_advisor_2_approval:      T3Model._slotFromApproval(steps.Co_Advisor_2),
-        faculty_com_approval:       T3Model._slotFromApproval(steps.Faculty_Committee, { withMeeting: true }),
+        advisor_approval:           slotFromApproval(steps.Advisor),
+        co_advisor_1_approval:      slotFromApproval(steps.Co_Advisor_1),
+        co_advisor_2_approval:      slotFromApproval(steps.Co_Advisor_2),
+        faculty_com_approval:       slotFromApproval(steps.Faculty_Committee, { withMeeting: true }),
       };
     });
   }
@@ -458,47 +420,18 @@ class T3Model {
   // ============================================================
 
   static async advisorReview(t3Id, advisorId, action, remark) {
-    const [pendingSlot] = await db.query(
-      `SELECT approval_id, step FROM request_approvals
-        WHERE request_type = 'T3' AND request_id = ?
-          AND step IN ('Advisor','Co_Advisor_1','Co_Advisor_2')
-          AND approver_id = ? AND status = 'Pending'
-        LIMIT 1`,
-      [t3Id, advisorId]
-    );
-    if (!pendingSlot.length) return null;
+    return withTransaction(async (conn) => {
+      const result = await reviewAdvisorSlot(conn, 'T3', t3Id, advisorId, action, remark);
+      if (!result) return null;
+      const { anyRejected, allApproved } = result;
 
-    const newStatus = action === 'approve' ? 'Approved' : 'Rejected';
-    await db.query(
-      `UPDATE request_approvals SET status = ?, remark = ?, decided_at = NOW() WHERE approval_id = ?`,
-      [newStatus, remark, pendingSlot[0].approval_id]
-    );
+      const newOverallStatus = anyRejected ? 'Rejected' : 'Pending';
+      if (anyRejected) {
+        await conn.query(`UPDATE t3_requests SET overall_status = 'Rejected' WHERE t3_id = ?`, [t3Id]);
+      }
 
-    if (action === 'approve' && pendingSlot[0].step === 'Advisor') {
-      await db.query(
-        `UPDATE request_approvals SET status = 'Approved', decided_at = NOW()
-          WHERE request_type = 'T3' AND request_id = ?
-            AND step IN ('Co_Advisor_1','Co_Advisor_2') AND status = 'Pending'`,
-        [t3Id]
-      );
-    }
-
-    const [advisorSteps] = await db.query(
-      `SELECT status FROM request_approvals
-        WHERE request_type = 'T3' AND request_id = ?
-          AND step IN ('Advisor','Co_Advisor_1','Co_Advisor_2')`,
-      [t3Id]
-    );
-
-    const anyRejected = advisorSteps.some(s => s.status === 'Rejected');
-    const allApproved = advisorSteps.every(s => s.status === 'Approved');
-
-    const newOverallStatus = anyRejected ? 'Rejected' : 'Pending';
-    if (anyRejected) {
-      await db.query(`UPDATE t3_requests SET overall_status = 'Rejected' WHERE t3_id = ?`, [t3Id]);
-    }
-
-    return { anyRejected, allApproved, newOverallStatus };
+      return { anyRejected, allApproved, newOverallStatus };
+    });
   }
 
   // ============================================================
@@ -512,19 +445,21 @@ class T3Model {
   static async facultyReview(t3Id, action, meetingNo, meetingDate, remark) {
     const status = action === 'approve' ? 'Approved' : 'Rejected';
 
-    await db.query(
-      `UPDATE request_approvals
-          SET status = ?, meeting_no = ?, meeting_date = ?, remark = ?, decided_at = NOW()
-        WHERE request_type = 'T3' AND request_id = ? AND step = 'Faculty_Committee'`,
-      [status, meetingNo || null, meetingDate || null, remark || null, t3Id]
-    );
+    return withTransaction(async (conn) => {
+      await conn.query(
+        `UPDATE request_approvals
+            SET status = ?, meeting_no = ?, meeting_date = ?, remark = ?, decided_at = NOW()
+          WHERE request_type = 'T3' AND request_id = ? AND step = 'Faculty_Committee'`,
+        [status, meetingNo || null, meetingDate || null, remark || null, t3Id]
+      );
 
-    await db.query(
-      `UPDATE t3_requests SET overall_status = ? WHERE t3_id = ?`,
-      [status, t3Id]
-    );
+      await conn.query(
+        `UPDATE t3_requests SET overall_status = ? WHERE t3_id = ?`,
+        [status, t3Id]
+      );
 
-    return { newOverallStatus: status, facultyApproved: action === 'approve' };
+      return { newOverallStatus: status, facultyApproved: action === 'approve' };
+    });
   }
 
   // ============================================================

@@ -70,115 +70,124 @@ function normalizePubStatus(value) {
 
 class T3Controller {
   // ============================================================
+  // Shared validation + creation ใช้ร่วมกันโดย submit() และ submitWithFiles()
+  // คืน { error: {status, code, message} } ถ้า validate ไม่ผ่าน
+  // หรือ { t3Id, student, majorAdvisor, journal_snapshot, paper_and_research_details } ถ้าสำเร็จ
+  // ============================================================
+  static async _validateAndCreate(studentId, {
+    pre_t3_id,
+    journal_snapshot,
+    paper_and_research_details,
+    publication_details,
+    journal_metrics,
+  }) {
+    // --- Validate required fields ---
+    if (!pre_t3_id || !journal_snapshot || !paper_and_research_details || !publication_details || !journal_metrics) {
+      return { error: {
+        status: 400, code: 'MISSING_FIELDS',
+        message: 'กรุณาระบุ pre_t3_id, journal_snapshot, paper_and_research_details, publication_details, journal_metrics',
+      } };
+    }
+
+    // ตรวจ paper_and_research_details fields
+    const paperRequired = ['title_thai', 'title_english', 'first_author', 'corresponding_author'];
+    for (const field of paperRequired) {
+      if (!paper_and_research_details[field]) {
+        return { error: {
+          status: 400, code: 'MISSING_PAPER_FIELD',
+          message: `paper_and_research_details.${field} จำเป็นต้องระบุ`,
+        } };
+      }
+    }
+    paper_and_research_details.innovation_type = normalizeInnovationType(paper_and_research_details.innovation_type);
+
+    // ตรวจ publication_details
+    const pubRequired = ['type', 'weight_score'];
+    for (const field of pubRequired) {
+      if (publication_details[field] === undefined) {
+        return { error: {
+          status: 400, code: 'MISSING_PUB_FIELD',
+          message: `publication_details.${field} จำเป็นต้องระบุ`,
+        } };
+      }
+    }
+
+    // ตรวจ has_impact_score + impact_factor
+    if (journal_metrics.has_impact_score === undefined) {
+      return { error: {
+        status: 400, code: 'MISSING_METRICS',
+        message: 'journal_metrics.has_impact_score จำเป็นต้องระบุ',
+      } };
+    }
+
+    // ตรวจ Pre-T3 ต้อง Approved และเป็นของนิสิตคนนี้
+    const preT3 = await PreT3Model.findById(pre_t3_id);
+    if (!preT3) {
+      return { error: { status: 404, code: 'PRE_T3_NOT_FOUND', message: 'ไม่พบ Pre-T3 นี้' } };
+    }
+    if (preT3.student_id !== studentId) {
+      return { error: { status: 403, code: 'FORBIDDEN', message: 'Pre-T3 นี้ไม่ใช่ของคุณ' } };
+    }
+    if (preT3.overall_status !== 'Approved') {
+      return { error: {
+        status: 400, code: 'PRE_T3_NOT_APPROVED',
+        message: `Pre-T3 ต้องได้รับการอนุมัติก่อน (สถานะปัจจุบัน: ${preT3.overall_status})`,
+      } };
+    }
+    publication_details.type   = normalizePublicationType(publication_details.type, preT3);
+    publication_details.status = normalizePubStatus(publication_details.status);
+
+    // ดึงข้อมูลนิสิต
+    const student = await UserModel.findById(studentId);
+    if (!student) {
+      return { error: { status: 404, code: 'USER_NOT_FOUND', message: 'ไม่พบข้อมูลผู้ใช้' } };
+    }
+
+    // ดึง Advisor ของนิสิต
+    const [advisorRows] = await db.query(
+      `SELECT advisor_id, advisor_type
+         FROM advisor_assignments
+        WHERE student_id = ? AND is_active = TRUE`,
+      [studentId]
+    );
+
+    const majorAdvisor = advisorRows.find(a => a.advisor_type === 'Major');
+    const co1Advisor   = advisorRows.find(a => a.advisor_type === 'Co_1');
+    const co2Advisor   = advisorRows.find(a => a.advisor_type === 'Co_2');
+
+    if (!majorAdvisor) {
+      return { error: { status: 400, code: 'NO_MAJOR_ADVISOR', message: 'บัญชีนี้ยังไม่มีที่ปรึกษาหลัก (Major Advisor) กรุณาติดต่อ Admin' } };
+    }
+
+    const t3Id = await T3Model.create(
+      studentId,
+      pre_t3_id,
+      paper_and_research_details,
+      publication_details,
+      journal_metrics,
+      {
+        majorAdvisorId: majorAdvisor.advisor_id,
+        coAdvisor1Id:   co1Advisor?.advisor_id || null,
+        coAdvisor2Id:   co2Advisor?.advisor_id || null,
+      }
+    );
+
+    return { t3Id, student, majorAdvisor, journal_snapshot, paper_and_research_details };
+  }
+
+  // ============================================================
   // POST /api/t3
   // Role: Student
   // ============================================================
   static async submit(req, res) {
     try {
       const studentId = req.user.sub;
-      const {
-        pre_t3_id,
-        journal_snapshot,
-        paper_and_research_details,
-        publication_details,
-        journal_metrics,
-      } = req.body;
-
-      // --- Validate required fields ---
-      if (!pre_t3_id || !journal_snapshot || !paper_and_research_details || !publication_details || !journal_metrics) {
-        return res.status(400).json({
-          success: false,
-          code: 'MISSING_FIELDS',
-          message: 'กรุณาระบุ pre_t3_id, journal_snapshot, paper_and_research_details, publication_details, journal_metrics',
-        });
+      const result = await T3Controller._validateAndCreate(studentId, req.body);
+      if (result.error) {
+        const { status, ...body } = result.error;
+        return res.status(status).json({ success: false, ...body });
       }
-
-      // ตรวจ paper_and_research_details fields
-      const paperRequired = ['title_thai', 'title_english', 'first_author', 'corresponding_author'];
-      for (const field of paperRequired) {
-        if (!paper_and_research_details[field]) {
-          return res.status(400).json({
-            success: false,
-            code: 'MISSING_PAPER_FIELD',
-            message: `paper_and_research_details.${field} จำเป็นต้องระบุ`,
-          });
-        }
-      }
-      paper_and_research_details.innovation_type = normalizeInnovationType(paper_and_research_details.innovation_type);
-
-      // ตรวจ publication_details
-      const pubRequired = ['type', 'weight_score'];
-      for (const field of pubRequired) {
-        if (publication_details[field] === undefined) {
-          return res.status(400).json({
-            success: false,
-            code: 'MISSING_PUB_FIELD',
-            message: `publication_details.${field} จำเป็นต้องระบุ`,
-          });
-        }
-      }
-
-      // ตรวจ has_impact_score + impact_factor
-      if (journal_metrics.has_impact_score === undefined) {
-        return res.status(400).json({
-          success: false,
-          code: 'MISSING_METRICS',
-          message: 'journal_metrics.has_impact_score จำเป็นต้องระบุ',
-        });
-      }
-
-      // ตรวจ Pre-T3 ต้อง Approved และเป็นของนิสิตคนนี้
-      const preT3 = await PreT3Model.findById(pre_t3_id);
-      if (!preT3) {
-        return res.status(404).json({ success: false, code: 'PRE_T3_NOT_FOUND', message: 'ไม่พบ Pre-T3 นี้' });
-      }
-      if (preT3.student_id !== studentId) {
-        return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Pre-T3 นี้ไม่ใช่ของคุณ' });
-      }
-      if (preT3.overall_status !== 'Approved') {
-        return res.status(400).json({
-          success: false,
-          code: 'PRE_T3_NOT_APPROVED',
-          message: `Pre-T3 ต้องได้รับการอนุมัติก่อน (สถานะปัจจุบัน: ${preT3.overall_status})`,
-        });
-      }
-      publication_details.type   = normalizePublicationType(publication_details.type, preT3);
-      publication_details.status = normalizePubStatus(publication_details.status);
-
-      // ดึงข้อมูลนิสิต
-      const student = await UserModel.findById(studentId);
-      if (!student) {
-        return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', message: 'ไม่พบข้อมูลผู้ใช้' });
-      }
-
-      // ดึง Advisor ของนิสิต
-      const [advisorRows] = await db.query(
-        `SELECT advisor_id, advisor_type
-           FROM advisor_assignments
-          WHERE student_id = ? AND is_active = TRUE`,
-        [studentId]
-      );
-
-      const majorAdvisor = advisorRows.find(a => a.advisor_type === 'Major');
-      const co1Advisor   = advisorRows.find(a => a.advisor_type === 'Co_1');
-      const co2Advisor   = advisorRows.find(a => a.advisor_type === 'Co_2');
-
-      if (!majorAdvisor) {
-        return res.status(400).json({ success: false, code: 'NO_MAJOR_ADVISOR', message: 'บัญชีนี้ยังไม่มีที่ปรึกษาหลัก (Major Advisor) กรุณาติดต่อ Admin' });
-      }
-
-      const t3Id = await T3Model.create(
-        studentId,
-        pre_t3_id,
-        paper_and_research_details,
-        publication_details,
-        journal_metrics,
-        {
-          majorAdvisorId: majorAdvisor.advisor_id,
-          coAdvisor1Id:   co1Advisor?.advisor_id || null,
-          coAdvisor2Id:   co2Advisor?.advisor_id || null,
-        }
-      );
+      const { t3Id, student, majorAdvisor, journal_snapshot, paper_and_research_details } = result;
 
       // แจ้ง Advisor ทางอีเมล
       const advisorUser = await UserModel.findById(majorAdvisor.advisor_id);
@@ -501,101 +510,20 @@ class T3Controller {
         return val;
       };
 
-      const pre_t3_id                  = tryParse(req.body.pre_t3_id);
-      const journal_snapshot           = tryParse(req.body.journal_snapshot);
-      const paper_and_research_details = tryParse(req.body.paper_and_research_details);
-      const publication_details        = tryParse(req.body.publication_details);
-      const journal_metrics            = tryParse(req.body.journal_metrics);
+      const body = {
+        pre_t3_id:                  tryParse(req.body.pre_t3_id),
+        journal_snapshot:           tryParse(req.body.journal_snapshot),
+        paper_and_research_details: tryParse(req.body.paper_and_research_details),
+        publication_details:        tryParse(req.body.publication_details),
+        journal_metrics:            tryParse(req.body.journal_metrics),
+      };
 
-      // --- Validate required fields ---
-      if (!pre_t3_id || !journal_snapshot || !paper_and_research_details || !publication_details || !journal_metrics) {
-        return res.status(400).json({
-          success: false,
-          code: 'MISSING_FIELDS',
-          message: 'กรุณาระบุ pre_t3_id, journal_snapshot, paper_and_research_details, publication_details, journal_metrics',
-        });
+      const result = await T3Controller._validateAndCreate(studentId, body);
+      if (result.error) {
+        const { status, ...errBody } = result.error;
+        return res.status(status).json({ success: false, ...errBody });
       }
-
-      const paperRequired = ['title_thai', 'title_english', 'first_author', 'corresponding_author'];
-      for (const field of paperRequired) {
-        if (!paper_and_research_details[field]) {
-          return res.status(400).json({
-            success: false,
-            code: 'MISSING_PAPER_FIELD',
-            message: `paper_and_research_details.${field} จำเป็นต้องระบุ`,
-          });
-        }
-      }
-      paper_and_research_details.innovation_type = normalizeInnovationType(paper_and_research_details.innovation_type);
-
-      const pubRequired = ['type', 'weight_score'];
-      for (const field of pubRequired) {
-        if (publication_details[field] === undefined) {
-          return res.status(400).json({
-            success: false,
-            code: 'MISSING_PUB_FIELD',
-            message: `publication_details.${field} จำเป็นต้องระบุ`,
-          });
-        }
-      }
-
-      if (journal_metrics.has_impact_score === undefined) {
-        return res.status(400).json({
-          success: false,
-          code: 'MISSING_METRICS',
-          message: 'journal_metrics.has_impact_score จำเป็นต้องระบุ',
-        });
-      }
-
-      const preT3 = await PreT3Model.findById(pre_t3_id);
-      if (!preT3) {
-        return res.status(404).json({ success: false, code: 'PRE_T3_NOT_FOUND', message: 'ไม่พบ Pre-T3 นี้' });
-      }
-      if (preT3.student_id !== studentId) {
-        return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'Pre-T3 นี้ไม่ใช่ของคุณ' });
-      }
-      if (preT3.overall_status !== 'Approved') {
-        return res.status(400).json({
-          success: false,
-          code: 'PRE_T3_NOT_APPROVED',
-          message: `Pre-T3 ต้องได้รับการอนุมัติก่อน (สถานะปัจจุบัน: ${preT3.overall_status})`,
-        });
-      }
-      publication_details.type   = normalizePublicationType(publication_details.type, preT3);
-      publication_details.status = normalizePubStatus(publication_details.status);
-
-      const student = await UserModel.findById(studentId);
-      if (!student) {
-        return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', message: 'ไม่พบข้อมูลผู้ใช้' });
-      }
-
-      const [advisorRows] = await db.query(
-        `SELECT advisor_id, advisor_type
-           FROM advisor_assignments
-          WHERE student_id = ? AND is_active = TRUE`,
-        [studentId]
-      );
-
-      const majorAdvisor = advisorRows.find(a => a.advisor_type === 'Major');
-      const co1Advisor   = advisorRows.find(a => a.advisor_type === 'Co_1');
-      const co2Advisor   = advisorRows.find(a => a.advisor_type === 'Co_2');
-
-      if (!majorAdvisor) {
-        return res.status(400).json({ success: false, code: 'NO_MAJOR_ADVISOR', message: 'บัญชีนี้ยังไม่มีที่ปรึกษาหลัก (Major Advisor) กรุณาติดต่อ Admin' });
-      }
-
-      const t3Id = await T3Model.create(
-        studentId,
-        pre_t3_id,
-        paper_and_research_details,
-        publication_details,
-        journal_metrics,
-        {
-          majorAdvisorId: majorAdvisor.advisor_id,
-          coAdvisor1Id:   co1Advisor?.advisor_id || null,
-          coAdvisor2Id:   co2Advisor?.advisor_id || null,
-        }
-      );
+      const { t3Id, student, majorAdvisor, journal_snapshot, paper_and_research_details } = result;
 
       // --- จัดการไฟล์ (ถ้ามี) ---
       const evidenceFiles = {};

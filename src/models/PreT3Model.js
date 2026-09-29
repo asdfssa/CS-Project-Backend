@@ -22,6 +22,7 @@
  * step นี้ออกจาก enum ของ request_approvals ไปเลย เพราะไม่มีโค้ดจุดไหน insert แถวนี้
  */
 const db = require('../config/database');
+const { slotFromApproval, fetchApprovalsMap, reviewAdvisorSlot, withTransaction } = require('./_approvalHelpers');
 
 const CHECKLIST_COLUMNS = [
   'chk_scope_match',
@@ -149,56 +150,13 @@ class PreT3Model {
   }
 
   /**
-   * ดึง request_approvals ของ pre_t3_id หลายอันพร้อมกัน แล้ว group เป็น
-   * { [pre_t3_id]: { Advisor: row, Co_Advisor_1: row, ... } }
-   */
-  static async _fetchApprovalsMap(preT3Ids) {
-    if (!preT3Ids.length) return {};
-    const [rows] = await db.query(
-      `SELECT request_id, step, approver_id, status, remark, meeting_no, meeting_date, decided_at
-         FROM request_approvals
-        WHERE request_type = 'Pre_T3' AND request_id IN (?)`,
-      [preT3Ids]
-    );
-    const map = {};
-    for (const r of rows) {
-      if (!map[r.request_id]) map[r.request_id] = {};
-      map[r.request_id][r.step] = r;
-    }
-    return map;
-  }
-
-  static _slotFromApproval(approvalRow, { withMeeting = false } = {}) {
-    if (!approvalRow) {
-      return withMeeting
-        ? { status: 'Pending', meeting_no: null, meeting_date: null, remark: null, approved_at: null }
-        : { status: 'N/A', user_id: null, remark: null, approved_at: null };
-    }
-    if (withMeeting) {
-      return {
-        status:       approvalRow.status,
-        meeting_no:   approvalRow.meeting_no,
-        meeting_date: approvalRow.meeting_date,
-        remark:       approvalRow.remark,
-        approved_at:  approvalRow.decided_at,
-      };
-    }
-    return {
-      status:      approvalRow.status,
-      user_id:     approvalRow.approver_id,
-      remark:      approvalRow.remark,
-      approved_at: approvalRow.decided_at,
-    };
-  }
-
-  /**
    * แนบ journal_snapshot / student_snapshot / checklist_data / article_info /
    * advisor_approval / co_advisor_1_approval / co_advisor_2_approval /
    * faculty_com_approval / program_chair_approval เข้ากับแต่ละ row
    */
   static async _attachDerived(rows) {
     if (!rows.length) return rows;
-    const approvalsMap = await PreT3Model._fetchApprovalsMap(rows.map(r => r.pre_t3_id));
+    const approvalsMap = await fetchApprovalsMap('Pre_T3', rows.map(r => r.pre_t3_id));
 
     return rows.map(row => {
       const steps = approvalsMap[row.pre_t3_id] || {};
@@ -208,10 +166,10 @@ class PreT3Model {
         student_snapshot:       PreT3Model._buildStudentSnapshot(row),
         checklist_data:         PreT3Model._buildChecklistData(row),
         article_info:           PreT3Model._buildArticleInfo(row),
-        advisor_approval:       PreT3Model._slotFromApproval(steps.Advisor),
-        co_advisor_1_approval:  PreT3Model._slotFromApproval(steps.Co_Advisor_1),
-        co_advisor_2_approval:  PreT3Model._slotFromApproval(steps.Co_Advisor_2),
-        faculty_com_approval:   PreT3Model._slotFromApproval(steps.Faculty_Committee, { withMeeting: true }),
+        advisor_approval:       slotFromApproval(steps.Advisor),
+        co_advisor_1_approval:  slotFromApproval(steps.Co_Advisor_1),
+        co_advisor_2_approval:  slotFromApproval(steps.Co_Advisor_2),
+        faculty_com_approval:   slotFromApproval(steps.Faculty_Committee, { withMeeting: true }),
         program_chair_approval: { status: 'N/A', user_id: null, remark: null, approved_at: null },
       };
     });
@@ -393,53 +351,23 @@ class PreT3Model {
    * ถ้า approve ทุกคน → ส่งต่อ faculty_com
    */
   static async advisorReview(preT3Id, advisorId, action, remark) {
-    const [pendingSlot] = await db.query(
-      `SELECT approval_id, step FROM request_approvals
-        WHERE request_type = 'Pre_T3' AND request_id = ?
-          AND step IN ('Advisor','Co_Advisor_1','Co_Advisor_2')
-          AND approver_id = ? AND status = 'Pending'
-        LIMIT 1`,
-      [preT3Id, advisorId]
-    );
-    if (!pendingSlot.length) return null;
+    return withTransaction(async (conn) => {
+      const result = await reviewAdvisorSlot(conn, 'Pre_T3', preT3Id, advisorId, action, remark);
+      if (!result) return null;
+      const { anyRejected, allApproved } = result;
 
-    const newStatus = action === 'approve' ? 'Approved' : 'Rejected';
-    await db.query(
-      `UPDATE request_approvals SET status = ?, remark = ?, decided_at = NOW() WHERE approval_id = ?`,
-      [newStatus, remark, pendingSlot[0].approval_id]
-    );
+      let newOverallStatus = 'Pending';
+      if (anyRejected) {
+        newOverallStatus = 'Rejected';
+        await conn.query(
+          `UPDATE pre_t3_requests SET overall_status = 'Rejected', last_rejected_at = NOW() WHERE pre_t3_id = ?`,
+          [preT3Id]
+        );
+      }
+      // ถ้า approve ครบ → overall ยังเป็น Pending รอ faculty_com (ไม่เปลี่ยน)
 
-    // ถ้าอาจารย์หลักอนุมัติ → auto-approve co-advisors ที่ยัง Pending
-    if (action === 'approve' && pendingSlot[0].step === 'Advisor') {
-      await db.query(
-        `UPDATE request_approvals SET status = 'Approved', decided_at = NOW()
-          WHERE request_type = 'Pre_T3' AND request_id = ?
-            AND step IN ('Co_Advisor_1','Co_Advisor_2') AND status = 'Pending'`,
-        [preT3Id]
-      );
-    }
-
-    const [advisorSteps] = await db.query(
-      `SELECT status FROM request_approvals
-        WHERE request_type = 'Pre_T3' AND request_id = ?
-          AND step IN ('Advisor','Co_Advisor_1','Co_Advisor_2')`,
-      [preT3Id]
-    );
-
-    const anyRejected  = advisorSteps.some(s => s.status === 'Rejected');
-    const allApproved  = advisorSteps.every(s => s.status === 'Approved');
-
-    let newOverallStatus = 'Pending';
-    if (anyRejected) {
-      newOverallStatus = 'Rejected';
-      await db.query(
-        `UPDATE pre_t3_requests SET overall_status = 'Rejected', last_rejected_at = NOW() WHERE pre_t3_id = ?`,
-        [preT3Id]
-      );
-    }
-    // ถ้า approve ครบ → overall ยังเป็น Pending รอ faculty_com (ไม่เปลี่ยน)
-
-    return { anyRejected, allApproved, newOverallStatus };
+      return { anyRejected, allApproved, newOverallStatus };
+    });
   }
 
   // ============================================================
@@ -457,23 +385,25 @@ class PreT3Model {
   static async facultyReview(preT3Id, action, meetingNo, meetingDate, remark) {
     const status = action === 'approve' ? 'Approved' : 'Rejected';
 
-    await db.query(
-      `UPDATE request_approvals
-          SET status = ?, meeting_no = ?, meeting_date = ?, remark = ?, decided_at = NOW()
-        WHERE request_type = 'Pre_T3' AND request_id = ? AND step = 'Faculty_Committee'`,
-      [status, meetingNo || null, meetingDate || null, remark || null, preT3Id]
-    );
+    return withTransaction(async (conn) => {
+      await conn.query(
+        `UPDATE request_approvals
+            SET status = ?, meeting_no = ?, meeting_date = ?, remark = ?, decided_at = NOW()
+          WHERE request_type = 'Pre_T3' AND request_id = ? AND step = 'Faculty_Committee'`,
+        [status, meetingNo || null, meetingDate || null, remark || null, preT3Id]
+      );
 
-    const newOverallStatus = status;
-    await db.query(
-      `UPDATE pre_t3_requests
-          SET overall_status   = ?,
-              last_rejected_at = CASE WHEN ? = 'Rejected' THEN NOW() ELSE last_rejected_at END
-        WHERE pre_t3_id = ?`,
-      [newOverallStatus, status, preT3Id]
-    );
+      const newOverallStatus = status;
+      await conn.query(
+        `UPDATE pre_t3_requests
+            SET overall_status   = ?,
+                last_rejected_at = CASE WHEN ? = 'Rejected' THEN NOW() ELSE last_rejected_at END
+          WHERE pre_t3_id = ?`,
+        [newOverallStatus, status, preT3Id]
+      );
 
-    return { newOverallStatus };
+      return { newOverallStatus };
+    });
   }
 
   // ============================================================
@@ -485,52 +415,54 @@ class PreT3Model {
    * นิสิตแก้ไข checklist + journal แล้วยื่นใหม่
    */
   static async resubmit(preT3Id, journalSnapshot, checklistData, articleInfo) {
-    const [result] = await db.query(
-      `UPDATE pre_t3_requests
-          SET issn              = ?,
-              journal_name      = ?,
-              journal_url       = ?,
-              indexed_database  = ?,
-              quartile_or_tier  = ?,
-              is_discontinued   = ?,
-              is_hijacked       = ?,
-              article_title_en  = ?,
-              article_title_th  = ?,
-              article_authors   = ?,
-              article_doi       = ?,
-              ${CHECKLIST_COLUMNS.map(c => `${c} = ?`).join(', ')},
-              overall_status    = 'Pending',
-              resubmit_count    = resubmit_count + 1
-        WHERE pre_t3_id = ?
-          AND overall_status = 'Rejected'`,
-      [
-        journalSnapshot.issn,
-        journalSnapshot.journal_name,
-        journalSnapshot.journal_url || null,
-        journalSnapshot.indexed_database,
-        journalSnapshot.quartile_or_tier || null,
-        journalSnapshot.is_discontinued ? 1 : 0,
-        journalSnapshot.is_hijacked ? 1 : 0,
-        articleInfo?.title_en || null,
-        articleInfo?.title_th || null,
-        articleInfo?.authors || null,
-        articleInfo?.doi || null,
-        ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (checklistData[`item${i}`] ? 1 : 0)),
-        preT3Id,
-      ]
-    );
+    return withTransaction(async (conn) => {
+      const [result] = await conn.query(
+        `UPDATE pre_t3_requests
+            SET issn              = ?,
+                journal_name      = ?,
+                journal_url       = ?,
+                indexed_database  = ?,
+                quartile_or_tier  = ?,
+                is_discontinued   = ?,
+                is_hijacked       = ?,
+                article_title_en  = ?,
+                article_title_th  = ?,
+                article_authors   = ?,
+                article_doi       = ?,
+                ${CHECKLIST_COLUMNS.map(c => `${c} = ?`).join(', ')},
+                overall_status    = 'Pending',
+                resubmit_count    = resubmit_count + 1
+          WHERE pre_t3_id = ?
+            AND overall_status = 'Rejected'`,
+        [
+          journalSnapshot.issn,
+          journalSnapshot.journal_name,
+          journalSnapshot.journal_url || null,
+          journalSnapshot.indexed_database,
+          journalSnapshot.quartile_or_tier || null,
+          journalSnapshot.is_discontinued ? 1 : 0,
+          journalSnapshot.is_hijacked ? 1 : 0,
+          articleInfo?.title_en || null,
+          articleInfo?.title_th || null,
+          articleInfo?.authors || null,
+          articleInfo?.doi || null,
+          ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (checklistData[`item${i}`] ? 1 : 0)),
+          preT3Id,
+        ]
+      );
 
-    if (result.affectedRows === 0) return false;
+      if (result.affectedRows === 0) return false;
 
-    // reset ทุก approval step ที่เคยสร้างไว้กลับเป็น Pending
-    await db.query(
-      `UPDATE request_approvals
-          SET status = 'Pending', remark = NULL, meeting_no = NULL, meeting_date = NULL, decided_at = NULL
-        WHERE request_type = 'Pre_T3' AND request_id = ?`,
-      [preT3Id]
-    );
+      // reset ทุก approval step ที่เคยสร้างไว้กลับเป็น Pending
+      await conn.query(
+        `UPDATE request_approvals
+            SET status = 'Pending', remark = NULL, meeting_no = NULL, meeting_date = NULL, decided_at = NULL
+          WHERE request_type = 'Pre_T3' AND request_id = ?`,
+        [preT3Id]
+      );
 
-    return true;
+      return true;
+    });
   }
 
   // ============================================================

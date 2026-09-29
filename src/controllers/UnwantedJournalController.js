@@ -270,21 +270,33 @@ class UnwantedJournalController {
         }
 
         let imported = 0;
-        for (const row of records) {
-          await db.query(
-            `INSERT INTO msu_unwanted_journals
-               (issn, journal_name, publisher, note, recorded_date, created_by)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [
-              row.issn?.trim() || null,
-              row.journal_name.trim(),
-              row.publisher?.trim() || null,
-              row.note?.trim() || null,
-              row.recorded_date.trim(),
-              req.user.sub,
-            ]
-          );
-          imported++;
+        const conn = await db.getConnection();
+        try {
+          await conn.beginTransaction();
+
+          for (const row of records) {
+            await conn.query(
+              `INSERT INTO msu_unwanted_journals
+                 (issn, journal_name, publisher, note, recorded_date, created_by)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [
+                row.issn?.trim() || null,
+                row.journal_name.trim(),
+                row.publisher?.trim() || null,
+                row.note?.trim() || null,
+                row.recorded_date.trim(),
+                req.user.sub,
+              ]
+            );
+            imported++;
+          }
+
+          await conn.commit();
+        } catch (txErr) {
+          await conn.rollback();
+          throw txErr;
+        } finally {
+          conn.release();
         }
 
         return res.json({

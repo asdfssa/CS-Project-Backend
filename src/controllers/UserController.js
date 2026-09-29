@@ -77,7 +77,7 @@ class UserController {
   //
   // แก้ได้เฉพาะ: phone, facebook_id, line_id
   // field อื่น (prefix, first_name, last_name, msu_mail, degree_level ฯลฯ)
-  // ต้องติดต่อ Admin ผ่าน PATCH /api/admin/users/:id
+  // ต้องติดต่อ Admin ผ่าน PATCH /api/manage/users/:id
   // ============================================================
   static async updateProfile(req, res, next) {
     try {

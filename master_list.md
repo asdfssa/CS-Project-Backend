@@ -133,12 +133,12 @@
 - [x] `UnwantedJournalController.createOne` — ตัด ternary ไม่มีความหมายออก เหลือ `res.status(400)` ตรงๆ
 
 ### 🟢 Cleanup / Refactor (ไม่กระทบ behavior)
-- [ ] `T3Controller.submit()` กับ `submitWithFiles()` — โค้ดซ้ำ ~100 บรรทัด ควร extract shared validation helper
-- [ ] `PreT3Model.js` กับ `T3Model.js` — โครงสร้างซ้ำ (`_attachDerived`, `_slotFromApproval`, `advisorReview` ฯลฯ) พิจารณา extract shared helper
-- [ ] Documentation debt — comment อ้าง path/endpoint เก่าที่ไม่มีจริงแล้ว (`/api/admin/users/...` → `/api/manage/users/...`, `AdminController.deleteAdmin` comment บอก "hard delete" แต่เป็น soft delete — **หมายเหตุ: ถ้า A5 ทำ hard delete จริงแล้ว comment นี้จะถูกต้องเอง ไม่ต้องแก้**)
-- [ ] ไม่มี database transaction ในจุดที่ควร atomic: `AdminController.importUsers`/`updateAdvisors`, `UnwantedJournalController.importCsv`, `PreT3Model`/`T3Model` `advisorReview`/`facultyReview`/`resubmit`
-- [ ] `errorResponse.js`/`errorHandler.js` — hardcode `res.status(500)` เสมอ ทั้งที่ `MYSQL_ERRORS` map ไว้ละเอียดว่าควรเป็นคนละ status (เช่น `ER_DUP_ENTRY` → 409)
-- [ ] `errorResponse.js` — `serverError()` ไม่มี special-case สำหรับ custom error class ที่พก statusCode มาเอง (ต่างจาก `errorHandler.js` ที่เช็ค `instanceof AuthError`)
+- [x] `T3Controller.submit()` กับ `submitWithFiles()` — extract `_validateAndCreate()` ใช้ร่วมกัน (validate + หา advisor + `T3Model.create()`) เหลือแค่ parse body / จัดการไฟล์ / ส่งอีเมล ที่ต่างกันจริง
+- [x] `PreT3Model.js` กับ `T3Model.js` — extract `_approvalHelpers.js` (`slotFromApproval`, `fetchApprovalsMap`, `reviewAdvisorSlot`, `withTransaction`) ใช้ร่วมกัน
+- [x] Documentation debt — แก้ comment `/api/admin/users/...` → `/api/manage/users/...` ทั้งหมดใน `AdminController.js`/`UserController.js` (`deleteAdmin` comment ถูกอยู่แล้ว ไม่ต้องแก้)
+- [x] เพิ่ม database transaction: `AdminController.importUsers`/`updateAdvisors`, `UnwantedJournalController.importCsv` (wrap ด้วย `conn.beginTransaction`/`commit`/`rollback`), `PreT3Model`/`T3Model` `advisorReview`/`facultyReview`/`resubmit` (ใช้ `_approvalHelpers.withTransaction()` ร่วมกัน)
+- [x] `errorResponse.js`/`errorHandler.js` — เพิ่ม `status` ต่อ error type ใน `MYSQL_ERRORS`/`JWT_ERRORS`/`FS_ERRORS`/Multer/default แล้วใช้ `parsed.status || 500` แทน hardcode 500
+- [x] `errorResponse.js` — `serverError()` เพิ่ม special-case สำหรับ error ที่พก `statusCode`+`code` มาเอง (เช่น `AuthError`) ให้ behavior ตรงกับ `errorHandler.js`
 
 ### 🔵 ควรพิจารณา (ไม่ใช่บั๊ก แต่ควรตระหนัก)
 - [ ] `TCIService`/`TCIScraper` — fallback `journals[0]` เมื่อไม่เจอ exact ISSN match อาจได้ข้อมูลวารสารผิดตัว

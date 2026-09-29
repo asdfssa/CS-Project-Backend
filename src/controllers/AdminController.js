@@ -80,7 +80,7 @@ class AdminController {
   }
 
   // ============================================================
-  // GET /api/admin/users
+  // GET /api/manage/users
   // Query params: role, status, search, page, limit
   // ============================================================
   static async getUsers(req, res, next) {
@@ -162,7 +162,7 @@ const [rows] = await db.query(
   }
 
   // ============================================================
-  // PATCH /api/admin/users/:id/approve  (Pending → Active)
+  // PATCH /api/manage/users/:id/approve  (Pending → Active)
   // ============================================================
   static async approveUser(req, res, next) {
     try {
@@ -190,7 +190,7 @@ const [rows] = await db.query(
   }
 
   // ============================================================
-  // PATCH /api/admin/users/:id/suspend
+  // PATCH /api/manage/users/:id/suspend
   // ============================================================
   static async suspendUser(req, res, next) {
     try {
@@ -215,7 +215,7 @@ const [rows] = await db.query(
   }
 
   // ============================================================
-  // PATCH /api/admin/users/:id/activate  (Suspended → Active)
+  // PATCH /api/manage/users/:id/activate  (Suspended → Active)
   // ============================================================
   static async activateUser(req, res, next) {
     try {
@@ -237,7 +237,7 @@ const [rows] = await db.query(
   }
 
   // ============================================================
-  // PATCH /api/admin/users/:id  — แก้ไขข้อมูล
+  // PATCH /api/manage/users/:id  — แก้ไขข้อมูล
   // Body: { prefix, first_name, last_name, phone, degree_level }
   // ============================================================
   static async updateUser(req, res, next) {
@@ -310,7 +310,7 @@ const [rows] = await db.query(
   }
   
 // ============================================================
-  // POST /api/admin/users/single — เพิ่ม user ทีละคน
+  // POST /api/manage/users/single — เพิ่ม user ทีละคน
   // Body: { role, first_name, last_name, msu_mail, prefix?,
   //         phone?, degree_level?, curriculum_year?,
   //         study_plan_code?, advisor_major_mail?, advisor_co1_mail? }
@@ -414,7 +414,7 @@ if (role === 'Student') {
   }
 
   // ============================================================
-  // POST /api/admin/users/import — import CSV
+  // POST /api/manage/users/import — import CSV
   // multipart/form-data: file = CSV file
   // ============================================================
   static async importUsers(req, res, next) {
@@ -525,51 +525,63 @@ records = parse(req.file.buffer, {
           });
         }
 
-        // ===== ผ่านทั้งหมด → Insert =====
+        // ===== ผ่านทั้งหมด → Insert (transaction เดียว — all-or-nothing จริง) =====
         let imported = 0;
-        for (const row of records) {
-          const mailLower = row.msu_mail.toLowerCase().trim();
+        const conn = await db.getConnection();
+        try {
+          await conn.beginTransaction();
 
-          const [result] = await db.query(
-            `INSERT INTO users
-               (msu_mail,
-                role, prefix, first_name, last_name,
-                phone, degree_level, curriculum_year, study_plan_code,
-                account_status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')`,
-            [
-              mailLower, row.role,
-              row.prefix || null, row.first_name.trim(), row.last_name.trim(),
-              row.phone || null,
-              row.degree_level || null, row.curriculum_year || null, row.study_plan_code || null,
-            ]
-          );
-          const newUserId = result.insertId;
+          for (const row of records) {
+            const mailLower = row.msu_mail.toLowerCase().trim();
 
-          // ใช้ advisorMailMap ที่ fetch ไว้แล้ว ไม่ต้อง query ซ้ำ
-          if (row.role === 'Student' && row.advisor_major_mail) {
-            const majorAdvisorId = advisorMailMap[row.advisor_major_mail.toLowerCase().trim()];
-            if (majorAdvisorId) {
-              await db.query(
-                `INSERT INTO advisor_assignments
-                   (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Major')`,
-                [newUserId, majorAdvisorId]
-              );
-            }
+            const [result] = await conn.query(
+              `INSERT INTO users
+                 (msu_mail,
+                  role, prefix, first_name, last_name,
+                  phone, degree_level, curriculum_year, study_plan_code,
+                  account_status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')`,
+              [
+                mailLower, row.role,
+                row.prefix || null, row.first_name.trim(), row.last_name.trim(),
+                row.phone || null,
+                row.degree_level || null, row.curriculum_year || null, row.study_plan_code || null,
+              ]
+            );
+            const newUserId = result.insertId;
 
-            if (row.advisor_co1_mail) {
-              const co1AdvisorId = advisorMailMap[row.advisor_co1_mail.toLowerCase().trim()];
-              if (co1AdvisorId) {
-                await db.query(
+            // ใช้ advisorMailMap ที่ fetch ไว้แล้ว ไม่ต้อง query ซ้ำ
+            if (row.role === 'Student' && row.advisor_major_mail) {
+              const majorAdvisorId = advisorMailMap[row.advisor_major_mail.toLowerCase().trim()];
+              if (majorAdvisorId) {
+                await conn.query(
                   `INSERT INTO advisor_assignments
-                     (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Co_1')`,
-                  [newUserId, co1AdvisorId]
+                     (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Major')`,
+                  [newUserId, majorAdvisorId]
                 );
               }
+
+              if (row.advisor_co1_mail) {
+                const co1AdvisorId = advisorMailMap[row.advisor_co1_mail.toLowerCase().trim()];
+                if (co1AdvisorId) {
+                  await conn.query(
+                    `INSERT INTO advisor_assignments
+                       (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Co_1')`,
+                    [newUserId, co1AdvisorId]
+                  );
+                }
+              }
             }
+
+            imported++;
           }
 
-          imported++;
+          await conn.commit();
+        } catch (txErr) {
+          await conn.rollback();
+          throw txErr;
+        } finally {
+          conn.release();
         }
 
         return res.json({
@@ -583,7 +595,7 @@ records = parse(req.file.buffer, {
   }
 
   // ============================================================
-  // PATCH /api/admin/users/:id/advisors
+  // PATCH /api/manage/users/:id/advisors
   // Body: { advisor_major_mail?, advisor_co1_mail?, advisor_co2_mail? }
   // ============================================================
   static async updateAdvisors(req, res, next) {
@@ -621,30 +633,39 @@ records = parse(req.file.buffer, {
         return res.status(400).json({ success: false, message: e.message });
       }
 
-      // ลบ assignments เดิมทั้งหมดของนิสิตคนนี้
-      await db.query(
-        `DELETE FROM advisor_assignments WHERE student_id = ?`,
-        [id]
-      );
+      // ลบ assignments เดิม + insert ใหม่ ในทรานแซกชันเดียว กันเหลือ student
+      // ไม่มีที่ปรึกษาเลยถ้า insert พังกลางทาง
+      const conn = await db.getConnection();
+      try {
+        await conn.beginTransaction();
 
-      // insert ใหม่
-      if (majorId) {
-        await db.query(
-          `INSERT INTO advisor_assignments (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Major')`,
-          [id, majorId]
-        );
-      }
-      if (co1Id) {
-        await db.query(
-          `INSERT INTO advisor_assignments (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Co_1')`,
-          [id, co1Id]
-        );
-      }
-      if (co2Id) {
-        await db.query(
-          `INSERT INTO advisor_assignments (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Co_2')`,
-          [id, co2Id]
-        );
+        await conn.query(`DELETE FROM advisor_assignments WHERE student_id = ?`, [id]);
+
+        if (majorId) {
+          await conn.query(
+            `INSERT INTO advisor_assignments (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Major')`,
+            [id, majorId]
+          );
+        }
+        if (co1Id) {
+          await conn.query(
+            `INSERT INTO advisor_assignments (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Co_1')`,
+            [id, co1Id]
+          );
+        }
+        if (co2Id) {
+          await conn.query(
+            `INSERT INTO advisor_assignments (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Co_2')`,
+            [id, co2Id]
+          );
+        }
+
+        await conn.commit();
+      } catch (txErr) {
+        await conn.rollback();
+        throw txErr;
+      } finally {
+        conn.release();
       }
 
       return res.json({ success: true, message: 'อัปเดตอาจารย์ที่ปรึกษาเรียบร้อยแล้ว' });
