@@ -15,7 +15,7 @@ class ScopusService {
   }
 
   static async _fetchFromApi(issn) {
-    const keyObj = scopusProxy.getNextKey();
+    const keyObj = await scopusProxy.getNextKey();
 
     try {
       const response = await axios.get(
@@ -33,7 +33,7 @@ class ScopusService {
         }
       );
 
-      scopusProxy.incrementUsage(keyObj.index);
+      await scopusProxy.incrementUsage(keyObj.index, response.headers);
       const data = response.data['serial-metadata-response'];
 
       if (!data || !data.entry || !data.entry[0]) {
@@ -44,7 +44,7 @@ class ScopusService {
 
     } catch (err) {
       if (err.response?.status === 429) {
-        scopusProxy.markKeyUnavailable(keyObj.index);
+        await scopusProxy.markKeyUnavailable(keyObj.index);
         return ScopusService._fetchFromApi(issn);
       }
       if (err.response?.status === 404) {

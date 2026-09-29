@@ -193,11 +193,15 @@ class JournalController {
   /**
    * GET /api/journal/proxy-status
    */
-  static async proxyStatus(req, res) {
-    return res.json({
-      success: true,
-      data: scopusProxy.getStatus(),
-    });
+  static async proxyStatus(req, res, next) {
+    try {
+      return res.json({
+        success: true,
+        data: scopusProxy.getStatus(),
+      });
+    } catch (err) {
+      next(err);
+    }
   }
 }
 

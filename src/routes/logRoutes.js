@@ -67,6 +67,14 @@ module.exports = {
   }
 };
 
+// ปิดการเข้าถึงบน production (in-memory log viewer นี้ไม่ auth ตั้งใจไว้แค่ dev)
+router.use((req, res, next) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ success: false, message: 'Not found' });
+  }
+  next();
+});
+
 // API endpoints
 router.get('/', (req, res) => {
   const { level, limit = 100 } = req.query;

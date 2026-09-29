@@ -11,6 +11,7 @@ const path = require('path');
 const fs   = require('fs');
 const T3Model = require('../models/T3Model');
 const { serverError } = require('../utils/errorResponse');
+const { verifyFileType } = require('../middlewares/upload');
 
 // map field name → key ใน journal_evidence_files JSON
 const FIELD_TO_KEY = {
@@ -62,7 +63,19 @@ class UploadController {
         const key = FIELD_TO_KEY[fieldName];
         if (!key) continue;
 
-        const file         = fileArr[0];
+        const file = fileArr[0];
+
+        // เช็ค magic bytes จริง — fileFilter เช็คได้แค่ Content-Type ที่ client ส่งมา ปลอมได้
+        const isValidType = await verifyFileType(file.path);
+        if (!isValidType) {
+          fs.unlinkSync(file.path);
+          return res.status(400).json({
+            success: false,
+            code: 'INVALID_FILE_CONTENT',
+            message: `ไฟล์ "${fieldName}" มีเนื้อหาไม่ตรงกับประเภทไฟล์ที่ประกาศไว้ (รองรับเฉพาะ PDF, JPG, PNG, WEBP)`,
+          });
+        }
+
         const relativePath = path.relative(process.cwd(), file.path).replace(/\\/g, '/');
 
         // ถ้ามีไฟล์เก่าอยู่ → ลบออกก่อน
@@ -188,7 +201,9 @@ class UploadController {
         return res.status(404).json({ success: false, code: 'FILE_MISSING', message: 'ไม่พบไฟล์บน server' });
       }
 
-      res.sendFile(filePath);
+      // บังคับ Content-Disposition: attachment เสมอ — กัน browser เปิด/render ไฟล์แทน
+      // download ตรงๆ (จุดเดิมของ stored XSS ถ้ามีไฟล์หลุดผ่าน magic-byte check มาได้)
+      res.download(filePath, `${fieldName}${path.extname(filePath)}`);
     } catch (err) {
       return serverError(res, err, 'UploadController.downloadFile');
   }

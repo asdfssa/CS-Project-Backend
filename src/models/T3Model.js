@@ -10,13 +10,15 @@
  * publication_details, journal_metrics, journal_evidence_files, advisor_approval, ...)
  * กลับมาให้ตอน read เพื่อให้ Controller เดิมใช้งานต่อได้โดยไม่ต้องแก้ response shape
  *
- * หมายเหตุ: t3_requests (ต่างจาก pre_t3_requests) เก็บ journal snapshot แค่
- * issn + journal_name เท่านั้น (ไม่มี journal_url/indexed_database/quartile/
- * is_discontinued/is_hijacked) ตาม schema v2
+ * A6: t3_requests ไม่เก็บ issn/journal_name/degree_level/curriculum_year/
+ * study_plan_code ของตัวเองอีกต่อไป (ซ้ำกับ pre_t3_requests/users) — อ่านสด
+ * ผ่าน JOIN pre_t3_requests (โดย pre_t3_id) และ JOIN users (โดย student_id)
+ * แทนทุกจุด เพราะ T3 ต้องอ้าง pre_t3_id ที่ Approved แล้วเสมอ ค่าพวกนี้ไม่มีทาง
+ * เปลี่ยนหลังยื่นจริง (ต่างจาก pre_t3_requests ที่เป็น snapshot ตอนยื่น)
  *
- * grad_school: schema v2 เก็บเป็นคอลัมน์ตรงบน t3_requests (grad_school_status,
- * grad_school_remark, grad_school_decided_at, grad_school_relayed_by = Staff
- * user_id ที่กรอกผลจากอีเมล) แทน JSON blob เดิมที่เก็บ approved_by_email
+ * grad_school / submission_date / submission_round_cutoff: ตัดออกทั้งหมดใน A6
+ * เพราะไม่มีโค้ดจุดไหนอ่าน/เขียนจริง (endpoint grad-school-review ไม่มีอยู่จริง
+ * ในระบบ — ดู master_list.md A7)
  */
 const db = require('../config/database');
 
@@ -41,10 +43,7 @@ class T3Model {
   /**
    * นิสิตยื่น T3 ใหม่
    * @param {number} studentId
-   * @param {number} preT3Id               - ต้องมี Pre-T3 Approved ก่อน
-   * @param {string} issn
-   * @param {object} journalSnapshot       - issn, journal_name
-   * @param {object} studentSnapshot       - degree_level, study_plan_code, curriculum_year
+   * @param {number} preT3Id               - ต้องมี Pre-T3 Approved ก่อน (issn/journal_name อ่านจาก record นี้ตอน read)
    * @param {object} paperAndResearchDetails - title_thai, title_english, first_author, corresponding_author, innovation_type, innovation_detail
    * @param {object} publicationDetails    - type, weight_score, specified_database, status, volume, issue, publish_year
    * @param {object} journalMetrics        - has_impact_score, impact_factor, citescore, score_year
@@ -54,9 +53,6 @@ class T3Model {
   static async create(
     studentId,
     preT3Id,
-    issn,
-    journalSnapshot,
-    studentSnapshot,
     paperAndResearchDetails,
     publicationDetails,
     journalMetrics,
@@ -66,23 +62,17 @@ class T3Model {
 
     const [result] = await db.query(
       `INSERT INTO t3_requests
-         (pre_t3_id, student_id, issn, journal_name,
-          degree_level, curriculum_year, study_plan_code,
+         (pre_t3_id, student_id,
           title_thai, title_english, first_author, corresponding_author,
           innovation_type, innovation_detail,
           publication_type, weight_score, specified_database, publication_status,
           volume, issue, publish_year,
           has_impact_score, impact_factor, citescore, score_year,
           overall_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`,
       [
         preT3Id,
         studentId,
-        issn,
-        journalSnapshot.journal_name,
-        studentSnapshot.degree_level,
-        studentSnapshot.curriculum_year,
-        studentSnapshot.study_plan_code,
         paperAndResearchDetails.title_thai,
         paperAndResearchDetails.title_english,
         paperAndResearchDetails.first_author,
@@ -166,16 +156,6 @@ class T3Model {
       impact_factor:    row.impact_factor,
       citescore:        row.citescore,
       score_year:       row.score_year,
-    };
-  }
-
-  static _buildGradSchoolApproval(row) {
-    return {
-      status:             row.grad_school_status,
-      remark:             row.grad_school_remark,
-      approved_by_email:  null,
-      relayed_by:         row.grad_school_relayed_by,
-      approved_at:        row.grad_school_decided_at,
     };
   }
 
@@ -264,7 +244,6 @@ class T3Model {
         co_advisor_1_approval:      T3Model._slotFromApproval(steps.Co_Advisor_1),
         co_advisor_2_approval:      T3Model._slotFromApproval(steps.Co_Advisor_2),
         faculty_com_approval:       T3Model._slotFromApproval(steps.Faculty_Committee, { withMeeting: true }),
-        grad_school_approval:       T3Model._buildGradSchoolApproval(row),
       };
     });
   }
@@ -279,7 +258,7 @@ class T3Model {
     await db.query(
       `INSERT INTO t3_evidence_files (t3_id, file_type, file_path)
        VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE file_path = VALUES(file_path), uploaded_at = NOW()`,
+       ON DUPLICATE KEY UPDATE file_path = VALUES(file_path)`,
       [t3Id, fileType, filePath]
     );
     return true;
@@ -295,11 +274,6 @@ class T3Model {
     return true;
   }
 
-  static async getEvidenceFiles(t3Id) {
-    const map = await T3Model._fetchEvidenceFilesMap([t3Id]);
-    return map[t3Id];
-  }
-
   // ============================================================
   // READ
   // ============================================================
@@ -310,9 +284,12 @@ class T3Model {
   static async findById(t3Id) {
     const [rows] = await db.query(
       `SELECT t.*,
-              u.first_name, u.last_name, u.msu_mail
+              u.first_name, u.last_name, u.msu_mail,
+              u.degree_level, u.curriculum_year, u.study_plan_code,
+              p.issn, p.journal_name
          FROM t3_requests t
          JOIN users u ON u.user_id = t.student_id
+         JOIN pre_t3_requests p ON p.pre_t3_id = t.pre_t3_id
         WHERE t.t3_id = ?
         LIMIT 1`,
       [t3Id]
@@ -327,10 +304,14 @@ class T3Model {
    */
   static async findByStudentId(studentId) {
     const [rows] = await db.query(
-      `SELECT *
-         FROM t3_requests
-        WHERE student_id = ?
-        ORDER BY created_at DESC
+      `SELECT t.*,
+              u.degree_level, u.curriculum_year, u.study_plan_code,
+              p.issn, p.journal_name
+         FROM t3_requests t
+         JOIN users u ON u.user_id = t.student_id
+         JOIN pre_t3_requests p ON p.pre_t3_id = t.pre_t3_id
+        WHERE t.student_id = ?
+        ORDER BY t.created_at DESC
         LIMIT 100`,
       [studentId]
     );
@@ -342,9 +323,12 @@ class T3Model {
    */
   static async findPendingForAdvisor(advisorId) {
     const [rows] = await db.query(
-      `SELECT t.*, u.first_name, u.last_name, u.msu_mail
+      `SELECT t.*, u.first_name, u.last_name, u.msu_mail,
+              u.degree_level, u.curriculum_year, u.study_plan_code,
+              p.issn, p.journal_name
          FROM t3_requests t
          JOIN users u ON u.user_id = t.student_id
+         JOIN pre_t3_requests p ON p.pre_t3_id = t.pre_t3_id
         WHERE t.overall_status = 'Pending'
           AND EXISTS (
             SELECT 1 FROM request_approvals ra
@@ -370,9 +354,12 @@ class T3Model {
     const statusParams = status ? [status] : [];
 
     const [rows] = await db.query(
-      `SELECT t.*, u.first_name, u.last_name, u.msu_mail
+      `SELECT t.*, u.first_name, u.last_name, u.msu_mail,
+              u.degree_level, u.curriculum_year, u.study_plan_code,
+              p.issn, p.journal_name
          FROM t3_requests t
          JOIN users u ON u.user_id = t.student_id
+         JOIN pre_t3_requests p ON p.pre_t3_id = t.pre_t3_id
          JOIN request_approvals ra
            ON ra.request_type = 'T3' AND ra.request_id = t.t3_id
           AND ra.step IN ('Advisor','Co_Advisor_1','Co_Advisor_2')
@@ -410,9 +397,12 @@ class T3Model {
     const statusParams = status ? [status] : [];
 
     const [rows] = await db.query(
-      `SELECT t.*, u.first_name, u.last_name, u.msu_mail
+      `SELECT t.*, u.first_name, u.last_name, u.msu_mail,
+              u.degree_level, u.curriculum_year, u.study_plan_code,
+              p.issn, p.journal_name
          FROM t3_requests t
          JOIN users u ON u.user_id = t.student_id
+         JOIN pre_t3_requests p ON p.pre_t3_id = t.pre_t3_id
          JOIN request_approvals ra
            ON ra.request_type = 'T3' AND ra.request_id = t.t3_id
           AND ra.step = 'Faculty_Committee'
@@ -442,9 +432,12 @@ class T3Model {
    */
   static async findPendingForFaculty() {
     const [rows] = await db.query(
-      `SELECT t.*, u.first_name, u.last_name, u.msu_mail
+      `SELECT t.*, u.first_name, u.last_name, u.msu_mail,
+              u.degree_level, u.curriculum_year, u.study_plan_code,
+              p.issn, p.journal_name
          FROM t3_requests t
          JOIN users u ON u.user_id = t.student_id
+         JOIN pre_t3_requests p ON p.pre_t3_id = t.pre_t3_id
          JOIN request_approvals fac
            ON fac.request_type = 'T3' AND fac.request_id = t.t3_id
           AND fac.step = 'Faculty_Committee' AND fac.status = 'Pending'
@@ -513,10 +506,8 @@ class T3Model {
   // ============================================================
 
   /**
-   * Faculty Com อนุมัติ/ปฏิเสธ พร้อม meeting_no, meeting_date
-   * ในระบบเดิม faculty approve/reject = ผลสุดท้าย (เจ้าหน้าที่รวมผล Grad School
-   * มาแล้ว) จึง auto-fill grad_school_* ให้ตรงกับผล faculty เพื่อ consistency
-   * ของ DB เช่นเดิม
+   * Faculty Com อนุมัติ/ปฏิเสธ พร้อม meeting_no, meeting_date — ผลนี้เป็นผลสุดท้าย
+   * ของ T3 (A6: ตัด grad_school_* ออกทั้งหมด ไม่มี step ถัดจากนี้อีกแล้ว)
    */
   static async facultyReview(t3Id, action, meetingNo, meetingDate, remark) {
     const status = action === 'approve' ? 'Approved' : 'Rejected';
@@ -529,58 +520,11 @@ class T3Model {
     );
 
     await db.query(
-      `UPDATE t3_requests
-          SET overall_status         = ?,
-              grad_school_status     = ?,
-              grad_school_remark     = ?,
-              grad_school_decided_at = NOW()
-        WHERE t3_id = ?`,
-      [status, status, remark || null, t3Id]
+      `UPDATE t3_requests SET overall_status = ? WHERE t3_id = ?`,
+      [status, t3Id]
     );
 
     return { newOverallStatus: status, facultyApproved: action === 'approve' };
-  }
-
-  // ============================================================
-  // UPDATE — Grad School Final Approval
-  // ============================================================
-
-  /**
-   * Staff บันทึกผลจาก Grad School (หลังได้รับอีเมลตอบกลับจาก researchpublication@msu.ac.th)
-   * @param {number} t3Id
-   * @param {string} action           - 'approve' | 'reject'
-   * @param {string|null} remark
-   * @param {number|null} relayedByUserId  - Staff user_id ที่กรอกผล (schema v2 เก็บ user_id แทนอีเมลที่ตอบกลับ)
-   */
-  static async gradSchoolReview(t3Id, action, remark, relayedByUserId = null) {
-    const status = action === 'approve' ? 'Approved' : 'Rejected';
-
-    await db.query(
-      `UPDATE t3_requests
-          SET grad_school_status     = ?,
-              grad_school_remark     = ?,
-              grad_school_decided_at = NOW(),
-              grad_school_relayed_by = ?,
-              overall_status         = ?
-        WHERE t3_id = ?`,
-      [status, remark || null, relayedByUserId, status, t3Id]
-    );
-
-    return { newOverallStatus: status };
-  }
-
-  // ============================================================
-  // UPDATE — Submission Details (วันที่ยื่น + รอบตัด)
-  // ============================================================
-
-  static async updateSubmissionDetails(t3Id, submissionDate, submissionRoundCutoff) {
-    await db.query(
-      `UPDATE t3_requests
-          SET submission_date          = ?,
-              submission_round_cutoff  = ?
-        WHERE t3_id = ?`,
-      [submissionDate, submissionRoundCutoff, t3Id]
-    );
   }
 
   // ============================================================

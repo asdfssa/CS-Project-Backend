@@ -115,7 +115,6 @@ class PreT3Controller {
         student_id:    student.user_id,
         full_name:     `${student.prefix || ''} ${student.first_name} ${student.last_name}`.trim(),
         phone:         student.phone         || null,
-        faculty:       student.faculty       || null,
         department:    student.department    || null,
         degree_level:  student.degree_level,
         msu_mail:      student.msu_mail,
@@ -317,13 +316,32 @@ class PreT3Controller {
           preT3Id,
         });
         const [staffRows] = await db.query(
-          `SELECT msu_mail FROM users WHERE role = 'Staff' AND account_status = 'Active' AND deleted_at IS NULL`
+          `SELECT msu_mail FROM users WHERE role = 'Staff' AND account_status = 'Active'`
         );
         for (const staff of staffRows) {
           MailService.sendPreT3Notification(staff.msu_mail, 'faculty_pending', {
             studentName: `${student.first_name} ${student.last_name}`,
             journalName,
             preT3Id,
+          });
+        }
+      }
+
+      // ถ้าคนที่เพิ่งอนุมัติ/ปฏิเสธคือที่ปรึกษาหลัก → แจ้งเตือน co-advisor (ถ้ามี) เฉยๆ
+      // ว่าที่ปรึกษาหลักตัดสินใจแล้ว เผื่อทั้ง 3 คนคุยกันนอกระบบไปแล้วแต่ที่ปรึกษาหลัก
+      // ลืมกดในระบบ — co-advisor จะได้รู้และไปทวงถามได้
+      if (mySlot === row.advisor_approval) {
+        const notifyEvent = action === 'approve' ? 'major_advisor_approved' : 'major_advisor_rejected';
+        const coAdvisorSlots = [row.co_advisor_1_approval, row.co_advisor_2_approval];
+        for (const slot of coAdvisorSlots) {
+          if (!slot?.user_id) continue;
+          const coAdvisor = await UserModel.findById(slot.user_id);
+          if (!coAdvisor) continue;
+          MailService.sendPreT3Notification(coAdvisor.msu_mail, notifyEvent, {
+            studentName: `${student.first_name} ${student.last_name}`,
+            journalName,
+            preT3Id,
+            remark,
           });
         }
       }
@@ -439,7 +457,10 @@ class PreT3Controller {
         abstract:     article_info?.abstract     || null,
       };
 
-      await PreT3Model.resubmit(preT3Id, journal_snapshot, checklist_data, articleInfoData);
+      const ok = await PreT3Model.resubmit(preT3Id, journal_snapshot, checklist_data, articleInfoData);
+      if (!ok) {
+        return res.status(400).json({ success: false, code: 'INVALID_STATE', message: 'สามารถยื่นซ้ำได้เฉพาะรายการที่ถูกปฏิเสธเท่านั้น' });
+      }
 
       // แจ้ง advisor ว่านิสิตยื่นซ้ำ
       const student   = await UserModel.findById(studentId);
@@ -464,7 +485,10 @@ class PreT3Controller {
 
   // ============================================================
   // PATCH /api/pre-t3/:id/cancel
-  // Role: Student (เฉพาะของตัวเอง, สถานะ Pending หรือ Rejected)
+  // Role: Student (เฉพาะของตัวเอง)
+  // อนุญาตตอน Pending/Rejected เสมอ หรือ Approved ก็ได้ถ้ายังไม่มี T3 ที่ Approved
+  // ผูกอยู่ — เผื่อ Pre-T3 ใช้งานต่อไม่ได้จริง (ตามที่ reject T3 ระบุ) นิสิตจะได้
+  // เริ่ม flow ใหม่ทั้งหมดได้ (Pre-T3 ใหม่ → T3 ใหม่)
   // ============================================================
   static async cancel(req, res) {
     try {
@@ -478,15 +502,25 @@ class PreT3Controller {
       if (row.student_id !== studentId) {
         return res.status(403).json({ success: false, code: 'FORBIDDEN', message: 'ไม่มีสิทธิ์ยกเลิกรายการนี้' });
       }
-      if (!['Pending', 'Rejected'].includes(row.overall_status)) {
+      if (!['Pending', 'Rejected', 'Approved'].includes(row.overall_status)) {
         return res.status(400).json({
           success: false,
           code: 'INVALID_STATE',
           message: `ไม่สามารถยกเลิกได้ Pre-T3 อยู่ในสถานะ ${row.overall_status}`,
         });
       }
+      if (row.overall_status === 'Approved' && await PreT3Model.hasApprovedT3(preT3Id)) {
+        return res.status(400).json({
+          success: false,
+          code: 'T3_ALREADY_APPROVED',
+          message: 'ไม่สามารถยกเลิกได้ เนื่องจากมี T3 ที่ได้รับการอนุมัติแล้วผูกกับ Pre-T3 นี้',
+        });
+      }
 
-      await PreT3Model.cancel(preT3Id);
+      const cancelled = await PreT3Model.cancel(preT3Id);
+      if (!cancelled) {
+        return res.status(400).json({ success: false, code: 'CANCEL_FAILED', message: 'ไม่สามารถยกเลิกได้ในขณะนี้' });
+      }
 
       return res.json({ success: true, message: 'ยกเลิก Pre-T3 เรียบร้อยแล้ว' });
     } catch (err) {

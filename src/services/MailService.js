@@ -65,7 +65,8 @@ class MailService {
   /**
    * ส่งอีเมลแจ้งเตือนทุก event ของ Pre-T3
    * @param {string} to       - email ปลายทาง
-   * @param {string} event    - 'advisor_pending' | 'advisor_rejected' | 'faculty_pending' | 'faculty_approved' | 'faculty_rejected'
+   * @param {string} event    - 'advisor_pending' | 'advisor_rejected' | 'advisor_approved' | 'faculty_pending' |
+   *                            'faculty_approved' | 'faculty_rejected' | 'major_advisor_approved' | 'major_advisor_rejected'
    * @param {object} data     - { studentName, journalName, issn?, preT3Id, remark?, meetingNo?, meetingDate? }
    */
   static async sendPreT3Notification(to, event, data) {
@@ -108,9 +109,10 @@ class MailService {
   /**
    * ส่งอีเมลแจ้งเตือนทุก event ของ T3
    * @param {string} to     - email ปลายทาง
-   * @param {string} event  - 'advisor_pending' | 'advisor_rejected' | 'faculty_pending' |
+   * @param {string} event  - 'advisor_pending' | 'advisor_rejected' | 'advisor_approved' | 'faculty_pending' |
    *                          'faculty_approved' | 'faculty_rejected' |
-   *                          'grad_school_approved' | 'grad_school_rejected'
+   *                          'grad_school_approved' | 'grad_school_rejected' |
+   *                          'major_advisor_approved' | 'major_advisor_rejected'
    * @param {object} data   - { studentName, journalName, articleTitle, t3Id, remark?, meetingNo?, meetingDate? }
    */
   static async sendT3Notification(to, event, data) {
@@ -170,6 +172,14 @@ class MailService {
         subject: `[Journal Watch] T3 ถูกปฏิเสธโดยคณะกรรมการ`,
         text: `T3 ของคุณ (ID: ${t3Id})\nบทความ: ${articleTitle}\nถูกปฏิเสธโดยคณะกรรมการบัณฑิตศึกษา${remark ? `\nเหตุผล: ${remark}` : ''}`,
       },
+      major_advisor_approved: {
+        subject: `[Journal Watch] แจ้งเตือน: อาจารย์ที่ปรึกษาหลักอนุมัติ T3 ของนิสิต ${studentName} แล้ว`,
+        text: `อาจารย์ที่ปรึกษาหลักได้อนุมัติ T3 ของนิสิต ${studentName} (ID: ${t3Id}) แล้ว\nบทความ: ${articleTitle}\n\nนี่เป็นเพียงอีเมลแจ้งเตือนเท่านั้น ไม่ต้องดำเนินการใดๆ เพิ่มเติม (ระบบอนุมัติในส่วนของท่านให้อัตโนมัติแล้ว)\nหากท่านยังไม่เคยได้รับแจ้งหรือพูดคุยเรื่องนี้มาก่อน กรุณาติดต่ออาจารย์ที่ปรึกษาหลักเพื่อสอบถามรายละเอียด`,
+      },
+      major_advisor_rejected: {
+        subject: `[Journal Watch] แจ้งเตือน: อาจารย์ที่ปรึกษาหลักปฏิเสธ T3 ของนิสิต ${studentName}`,
+        text: `อาจารย์ที่ปรึกษาหลักได้ปฏิเสธ T3 ของนิสิต ${studentName} (ID: ${t3Id})\nบทความ: ${articleTitle}${remark ? `\nเหตุผล: ${remark}` : ''}\n\nนี่เป็นเพียงอีเมลแจ้งเตือนเท่านั้น ไม่ต้องดำเนินการใดๆ เพิ่มเติม\nหากท่านยังไม่เคยได้รับแจ้งหรือพูดคุยเรื่องนี้มาก่อน กรุณาติดต่ออาจารย์ที่ปรึกษาหลักเพื่อสอบถามรายละเอียด`,
+      },
       grad_school_approved: {
         subject: `[Journal Watch] T3 ได้รับการอนุมัติจากบัณฑิตวิทยาลัย 🎉`,
         text: `T3 ของคุณ (ID: ${t3Id})\nบทความ: ${articleTitle}\nได้รับการอนุมัติจากบัณฑิตวิทยาลัย มหาวิทยาลัยมหาสารคาม\nขั้นตอนเสร็จสิ้นแล้ว`,
@@ -219,6 +229,14 @@ class MailService {
       faculty_rejected: {
         subject: `[Journal Watch] Pre-T3 ถูกปฏิเสธโดยคณะกรรมการ`,
         text: `Pre-T3 ของคุณ (ID: ${preT3Id}) สำหรับวารสาร ${journalName}\nถูกปฏิเสธ${remark ? `\nเหตุผล: ${remark}` : ''}\nกรุณาแก้ไขและยื่นใหม่อีกครั้ง`,
+      },
+      major_advisor_approved: {
+        subject: `[Journal Watch] แจ้งเตือน: อาจารย์ที่ปรึกษาหลักอนุมัติ Pre-T3 ของนิสิต ${studentName} แล้ว`,
+        text: `อาจารย์ที่ปรึกษาหลักได้อนุมัติ Pre-T3 ของนิสิต ${studentName} (ID: ${preT3Id}) แล้ว\nวารสาร: ${journalName}\n\nนี่เป็นเพียงอีเมลแจ้งเตือนเท่านั้น ไม่ต้องดำเนินการใดๆ เพิ่มเติม (ระบบอนุมัติในส่วนของท่านให้อัตโนมัติแล้ว)\nหากท่านยังไม่เคยได้รับแจ้งหรือพูดคุยเรื่องนี้มาก่อน กรุณาติดต่ออาจารย์ที่ปรึกษาหลักเพื่อสอบถามรายละเอียด`,
+      },
+      major_advisor_rejected: {
+        subject: `[Journal Watch] แจ้งเตือน: อาจารย์ที่ปรึกษาหลักปฏิเสธ Pre-T3 ของนิสิต ${studentName}`,
+        text: `อาจารย์ที่ปรึกษาหลักได้ปฏิเสธ Pre-T3 ของนิสิต ${studentName} (ID: ${preT3Id}) สำหรับวารสาร ${journalName}${remark ? `\nเหตุผล: ${remark}` : ''}\n\nนี่เป็นเพียงอีเมลแจ้งเตือนเท่านั้น ไม่ต้องดำเนินการใดๆ เพิ่มเติม\nหากท่านยังไม่เคยได้รับแจ้งหรือพูดคุยเรื่องนี้มาก่อน กรุณาติดต่ออาจารย์ที่ปรึกษาหลักเพื่อสอบถามรายละเอียด`,
       },
     };
 
@@ -272,11 +290,17 @@ class MailService {
     }
   }
 
+  static _escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+  }
+
   static _buildPreT3Html(title, body) {
-    const lines = body.split('\n').map(l => `<p style="margin:4px 0;">${l}</p>`).join('');
+    const lines = body.split('\n').map(l => `<p style="margin:4px 0;">${MailService._escapeHtml(l)}</p>`).join('');
     return `
       <div style="font-family:'Segoe UI',sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#fff;border:1px solid #eee;border-radius:8px;">
-        <h2 style="color:#1a73e8;margin-top:0;font-size:16px;">${title}</h2>
+        <h2 style="color:#1a73e8;margin-top:0;font-size:16px;">${MailService._escapeHtml(title)}</h2>
         <div style="color:#333;font-size:14px;line-height:1.6;">${lines}</div>
         <hr style="margin:20px 0;border:none;border-top:1px solid #eee;">
         <p style="color:#999;font-size:12px;margin:0;">Journal Watch — ระบบตรวจสอบคุณภาพวารสาร มหาวิทยาลัยมหาสารคาม</p>
@@ -287,12 +311,12 @@ class MailService {
   static _buildOtpHtml(otpCode, expiresMin, title) {
     return `
       <div style="font-family:'Segoe UI',sans-serif;max-width:480px;margin:0 auto;padding:24px;background:#fff;border:1px solid #eee;border-radius:8px;">
-        <h2 style="color:#f5a623;margin-top:0;">${title}</h2>
+        <h2 style="color:#f5a623;margin-top:0;">${MailService._escapeHtml(title)}</h2>
         <p>รหัส OTP ของคุณคือ:</p>
         <div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;padding:16px;background:#f9f9f9;border-radius:4px;margin:16px 0;">
-          ${otpCode}
+          ${MailService._escapeHtml(otpCode)}
         </div>
-        <p style="color:#666;font-size:14px;">รหัสนี้จะหมดอายุใน <strong>${expiresMin} นาที</strong></p>
+        <p style="color:#666;font-size:14px;">รหัสนี้จะหมดอายุใน <strong>${MailService._escapeHtml(expiresMin)} นาที</strong></p>
         <p style="color:#999;font-size:12px;margin-top:24px;">หากคุณไม่ได้ร้องขอรหัสนี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้</p>
       </div>
     `;

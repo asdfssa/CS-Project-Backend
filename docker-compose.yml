@@ -35,6 +35,7 @@ services:
       - "6082:6080"
     volumes:
       - ./uploads:/app/uploads
+      - ./data:/app/data
     depends_on:
       db:
         condition: service_healthy

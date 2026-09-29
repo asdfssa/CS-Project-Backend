@@ -17,9 +17,9 @@
  * (ข้อมูลเหล่านี้ query สดจาก users/advisor_assignments ได้อยู่แล้ว) จึงไม่ persist
  * และไม่ return สอง field นี้อีกต่อไป
  *
- * program_chair_approval: schema v2 มี step 'Program_Chair' ใน request_approvals แต่
- * business logic เดิม (advisorReview → facultyReview ตรง ๆ) ไม่เคยใช้ step นี้จริง
- * (ของเดิม hardcode เป็น 'N/A' เสมอ) — คงพฤติกรรมเดิมไว้ ไม่ insert แถว Program_Chair
+ * program_chair_approval: business logic เดิม (advisorReview → facultyReview ตรง ๆ)
+ * ไม่เคยใช้ step 'Program_Chair' จริง (ของเดิม hardcode เป็น 'N/A' เสมอ) — A6 เลยตัด
+ * step นี้ออกจาก enum ของ request_approvals ไปเลย เพราะไม่มีโค้ดจุดไหน insert แถวนี้
  */
 const db = require('../config/database');
 
@@ -44,15 +44,12 @@ class PreT3Model {
    * นิสิตยื่น Pre-T3 ใหม่
    * @param {number} studentId
    * @param {object} journalSnapshot  - issn, journal_name, journal_url, indexed_database, quartile_or_tier, is_discontinued, is_hijacked
-   * @param {object} studentSnapshot  - degree_level, study_plan_code, curriculum_year
    * @param {object} checklistData    - item1–item9: true/false
    * @param {object} advisorIds       - majorAdvisorId, coAdvisor1Id (null), coAdvisor2Id (null)
-   * @param {object} studentInfo      - unused (schema v2 ไม่ persist snapshot นี้แล้ว), เก็บ param ไว้เพื่อ compat
-   * @param {object} advisorInfo      - unused เช่นกัน
    * @param {object} articleInfo      - title_en, title_th, authors, doi
    * @returns {number} pre_t3_id ที่สร้างใหม่
    */
-  static async create(studentId, journalSnapshot, studentSnapshot, checklistData, advisorIds, studentInfo, advisorInfo, articleInfo) {
+  static async create(studentId, journalSnapshot, checklistData, advisorIds, articleInfo) {
     const { majorAdvisorId, coAdvisor1Id = null, coAdvisor2Id = null } = advisorIds;
 
     const [result] = await db.query(
@@ -60,11 +57,10 @@ class PreT3Model {
          (student_id,
           issn, journal_name, journal_url, indexed_database, quartile_or_tier,
           is_discontinued, is_hijacked,
-          degree_level, curriculum_year, study_plan_code,
           article_title_en, article_title_th, article_authors, article_doi,
           ${CHECKLIST_COLUMNS.join(', ')},
           overall_status, resubmit_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${CHECKLIST_COLUMNS.map(() => '?').join(', ')}, 'Pending', 0)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${CHECKLIST_COLUMNS.map(() => '?').join(', ')}, 'Pending', 0)`,
       [
         studentId,
         journalSnapshot.issn,
@@ -74,9 +70,6 @@ class PreT3Model {
         journalSnapshot.quartile_or_tier || null,
         journalSnapshot.is_discontinued ? 1 : 0,
         journalSnapshot.is_hijacked ? 1 : 0,
-        studentSnapshot.degree_level,
-        studentSnapshot.curriculum_year,
-        studentSnapshot.study_plan_code,
         articleInfo?.title_en || null,
         articleInfo?.title_th || null,
         articleInfo?.authors || null,
@@ -235,7 +228,7 @@ class PreT3Model {
     const [rows] = await db.query(
       `SELECT p.*,
               u.first_name, u.last_name, u.msu_mail,
-              u.degree_level AS user_degree_level
+              u.degree_level, u.curriculum_year, u.study_plan_code
          FROM pre_t3_requests p
          JOIN users u ON u.user_id = p.student_id
         WHERE p.pre_t3_id = ?
@@ -252,10 +245,11 @@ class PreT3Model {
    */
   static async findByStudentId(studentId) {
     const [rows] = await db.query(
-      `SELECT *
-         FROM pre_t3_requests
-        WHERE student_id = ?
-        ORDER BY created_at DESC
+      `SELECT p.*, u.degree_level, u.curriculum_year, u.study_plan_code
+         FROM pre_t3_requests p
+         JOIN users u ON u.user_id = p.student_id
+        WHERE p.student_id = ?
+        ORDER BY p.created_at DESC
         LIMIT 100`,
       [studentId]
     );
@@ -268,7 +262,7 @@ class PreT3Model {
    */
   static async findPendingForAdvisor(advisorId) {
     const [rows] = await db.query(
-      `SELECT p.*, u.first_name, u.last_name, u.msu_mail
+      `SELECT p.*, u.first_name, u.last_name, u.msu_mail, u.degree_level, u.curriculum_year, u.study_plan_code
          FROM pre_t3_requests p
          JOIN users u ON u.user_id = p.student_id
         WHERE p.overall_status = 'Pending'
@@ -298,7 +292,7 @@ class PreT3Model {
     const statusParams = status ? [status] : [];
 
     const [rows] = await db.query(
-      `SELECT p.*, u.first_name, u.last_name, u.msu_mail
+      `SELECT p.*, u.first_name, u.last_name, u.msu_mail, u.degree_level, u.curriculum_year, u.study_plan_code
          FROM pre_t3_requests p
          JOIN users u ON u.user_id = p.student_id
          JOIN request_approvals ra
@@ -338,7 +332,7 @@ class PreT3Model {
     const statusParams = status ? [status] : [];
 
     const [rows] = await db.query(
-      `SELECT p.*, u.first_name, u.last_name, u.msu_mail
+      `SELECT p.*, u.first_name, u.last_name, u.msu_mail, u.degree_level, u.curriculum_year, u.study_plan_code
          FROM pre_t3_requests p
          JOIN users u ON u.user_id = p.student_id
          JOIN request_approvals ra
@@ -371,7 +365,7 @@ class PreT3Model {
    */
   static async findPendingForFaculty() {
     const [rows] = await db.query(
-      `SELECT p.*, u.first_name, u.last_name, u.msu_mail
+      `SELECT p.*, u.first_name, u.last_name, u.msu_mail, u.degree_level, u.curriculum_year, u.study_plan_code
          FROM pre_t3_requests p
          JOIN users u ON u.user_id = p.student_id
          JOIN request_approvals fac
@@ -491,7 +485,7 @@ class PreT3Model {
    * นิสิตแก้ไข checklist + journal แล้วยื่นใหม่
    */
   static async resubmit(preT3Id, journalSnapshot, checklistData, articleInfo) {
-    await db.query(
+    const [result] = await db.query(
       `UPDATE pre_t3_requests
           SET issn              = ?,
               journal_name      = ?,
@@ -526,6 +520,8 @@ class PreT3Model {
       ]
     );
 
+    if (result.affectedRows === 0) return false;
+
     // reset ทุก approval step ที่เคยสร้างไว้กลับเป็น Pending
     await db.query(
       `UPDATE request_approvals
@@ -543,17 +539,39 @@ class PreT3Model {
 
   /**
    * เปลี่ยน overall_status เป็น 'Cancelled'
-   * ทำได้เฉพาะตอนสถานะ Pending หรือ Rejected เท่านั้น
+   * ทำได้ตอน Pending/Rejected เสมอ หรือ Approved ก็ได้ถ้ายังไม่มี T3 ที่ Approved
+   * ผูกอยู่ (กัน record ที่สำเร็จสมบูรณ์แล้วถูกลบทิ้งโดยไม่ตั้งใจ — race-safe เพราะ
+   * เช็คในเงื่อนไข UPDATE เดียวกันแบบ atomic ไม่ใช่เช็คแยกก่อน)
    */
   static async cancel(preT3Id) {
     const [result] = await db.query(
-      `UPDATE pre_t3_requests
+      `UPDATE pre_t3_requests p
           SET overall_status = 'Cancelled'
-        WHERE pre_t3_id = ?
-          AND overall_status IN ('Pending', 'Rejected')`,
+        WHERE p.pre_t3_id = ?
+          AND (
+            p.overall_status IN ('Pending', 'Rejected')
+            OR (
+              p.overall_status = 'Approved'
+              AND NOT EXISTS (
+                SELECT 1 FROM t3_requests t
+                 WHERE t.pre_t3_id = p.pre_t3_id AND t.overall_status = 'Approved'
+              )
+            )
+          )`,
       [preT3Id]
     );
     return result.affectedRows > 0;
+  }
+
+  /**
+   * เช็คว่า Pre-T3 นี้มี T3 ที่ Approved แล้วผูกอยู่ไหม (ใช้ตัดสินใจก่อนยกเลิก)
+   */
+  static async hasApprovedT3(preT3Id) {
+    const [rows] = await db.query(
+      `SELECT 1 FROM t3_requests WHERE pre_t3_id = ? AND overall_status = 'Approved' LIMIT 1`,
+      [preT3Id]
+    );
+    return rows.length > 0;
   }
 }
 

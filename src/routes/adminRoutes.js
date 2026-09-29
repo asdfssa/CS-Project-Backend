@@ -16,9 +16,6 @@ router.use(requireRole('Admin', 'SuperAdmin'));
 // ภาพรวมสถิติ
 router.get('/stats', AdminController.getStats);
 
-// System logs
-router.get('/logs', AdminController.getLogs);
-
 // จัดการ Admin (Admin/SuperAdmin เท่านั้น)
 router.get('/admins',                AdminController.getAdmins);
 router.post('/admins',               AdminController.createAdmin);

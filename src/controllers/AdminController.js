@@ -30,7 +30,6 @@ class AdminController {
             SUM(account_status = 'Active')                      AS active,
             SUM(account_status = 'Suspended')                   AS suspended
           FROM users
-          WHERE deleted_at IS NULL
         `),
         db.query(`
           SELECT COUNT(*) AS total,
@@ -49,7 +48,6 @@ class AdminController {
         db.query(`
           SELECT COUNT(*) AS total
           FROM msu_unwanted_journals
-          WHERE deleted_at IS NULL
         `),
       ]);
 
@@ -90,7 +88,7 @@ class AdminController {
       const { role, status, search, page = 1, limit = 20 } = req.query;
       const offset = (Number(page) - 1) * Number(limit);
 
-      let where = ['u.deleted_at IS NULL', "u.role NOT IN ('Admin','SuperAdmin')"];
+      let where = ["u.role NOT IN ('Admin','SuperAdmin')"];
       const params = [];
 
       if (role)   { where.push('u.role = ?');           params.push(role); }
@@ -114,7 +112,7 @@ const [rows] = await db.query(
           u.msu_mail, u.role, u.degree_level, u.account_status,
           u.phone, u.facebook_id, u.line_id,
           u.curriculum_year, u.study_plan_code,
-          u.created_at, u.last_login_at
+          u.created_at
          FROM users u
          WHERE ${whereSQL}
          ORDER BY u.created_at DESC
@@ -171,7 +169,7 @@ const [rows] = await db.query(
       const { id } = req.params;
       const [target] = await db.query(
         `SELECT user_id, account_status, role, msu_mail, first_name, last_name
-           FROM users WHERE user_id = ? AND deleted_at IS NULL`,
+           FROM users WHERE user_id = ?`,
         [id]
       );
       if (!target.length) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้' });
@@ -197,11 +195,11 @@ const [rows] = await db.query(
   static async suspendUser(req, res, next) {
     try {
       const { id } = req.params;
-      if (Number(id) === req.user.userId)
+      if (Number(id) === req.user.sub)
         return res.status(400).json({ success: false, message: 'ไม่สามารถระงับบัญชีตัวเองได้' });
 
       const [target] = await db.query(
-        `SELECT user_id, account_status, role FROM users WHERE user_id = ? AND deleted_at IS NULL`,
+        `SELECT user_id, account_status, role FROM users WHERE user_id = ?`,
         [id]
       );
       if (!target.length) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้' });
@@ -223,7 +221,7 @@ const [rows] = await db.query(
     try {
       const { id } = req.params;
       const [target] = await db.query(
-        `SELECT user_id, account_status FROM users WHERE user_id = ? AND deleted_at IS NULL`,
+        `SELECT user_id, account_status FROM users WHERE user_id = ?`,
         [id]
       );
       if (!target.length) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้' });
@@ -252,7 +250,7 @@ const [rows] = await db.query(
                 phone, facebook_id, line_id,
                 degree_level, curriculum_year, study_plan_code, role
          FROM users
-         WHERE user_id = ? AND deleted_at IS NULL`,
+         WHERE user_id = ?`,
         [id]
       );
       if (!target.length) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้' });
@@ -331,7 +329,7 @@ const [rows] = await db.query(
       if (!last_name)  return res.status(400).json({ success: false, message: 'กรุณาระบุนามสกุล' });
       if (!msu_mail)   return res.status(400).json({ success: false, message: 'กรุณาระบุ MSU Mail' });
 
-      const allowedRoles = ['Student', 'Supervisor', 'Program_Chair'];
+      const allowedRoles = ['Student', 'Supervisor'];
       if (!allowedRoles.includes(role))
         return res.status(400).json({ success: false, message: `Role ต้องเป็น ${allowedRoles.join(', ')}` });
 
@@ -339,7 +337,7 @@ const [rows] = await db.query(
 
       // ===== เช็ก msu_mail ซ้ำ =====
       const [existing] = await db.query(
-        `SELECT user_id FROM users WHERE msu_mail = ? AND deleted_at IS NULL`,
+        `SELECT user_id FROM users WHERE msu_mail = ?`,
         [mailLower]
       );
       if (existing.length)
@@ -354,7 +352,7 @@ if (role === 'Student') {
         if (advisor_major_mail) {
           const [majRows] = await db.query(
             `SELECT user_id FROM users
-             WHERE msu_mail = ? AND role = 'Supervisor' AND deleted_at IS NULL`,
+             WHERE msu_mail = ? AND role = 'Supervisor'`,
             [advisor_major_mail.toLowerCase().trim()]
           );
           if (!majRows.length)
@@ -365,7 +363,7 @@ if (role === 'Student') {
         if (advisor_co1_mail) {
           const [co1Rows] = await db.query(
             `SELECT user_id FROM users
-             WHERE msu_mail = ? AND role = 'Supervisor' AND deleted_at IS NULL`,
+             WHERE msu_mail = ? AND role = 'Supervisor'`,
             [advisor_co1_mail.toLowerCase().trim()]
           );
           if (!co1Rows.length)
@@ -377,11 +375,11 @@ if (role === 'Student') {
       // ===== Insert user =====
       const [result] = await db.query(
         `INSERT INTO users
-           (msu_mail, oauth_provider_id,
+           (msu_mail,
             role, prefix, first_name, last_name,
             phone, degree_level, curriculum_year, study_plan_code,
             account_status)
-         VALUES (?, UUID(), ?, ?, ?, ?, ?, ?, ?, ?, 'Active')`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')`,
         [
           mailLower, role,
           prefix || null, first_name.trim(), last_name.trim(),
@@ -463,7 +461,7 @@ records = parse(req.file.buffer, {
         let existingMailSet = new Set();
         if (allMails.length) {
           const [existingRows] = await db.query(
-            `SELECT msu_mail FROM users WHERE msu_mail IN (?) AND deleted_at IS NULL`,
+            `SELECT msu_mail FROM users WHERE msu_mail IN (?)`,
             [allMails]
           );
           existingMailSet = new Set(existingRows.map(r => r.msu_mail));
@@ -473,7 +471,7 @@ records = parse(req.file.buffer, {
         if (allAdvisorMails.length) {
           const [advisorRows] = await db.query(
             `SELECT user_id, msu_mail FROM users
-             WHERE msu_mail IN (?) AND role = 'Supervisor' AND deleted_at IS NULL`,
+             WHERE msu_mail IN (?) AND role = 'Supervisor'`,
             [allAdvisorMails]
           );
           for (const a of advisorRows) advisorMailMap[a.msu_mail] = a.user_id;
@@ -489,7 +487,7 @@ records = parse(req.file.buffer, {
           if (!row.last_name)  errors.push(`Row ${rowNum}: ไม่มี last_name`);
           if (!row.msu_mail)   errors.push(`Row ${rowNum}: ไม่มี msu_mail`);
 
-          const allowedRoles = ['Student', 'Supervisor', 'Program_Chair'];
+          const allowedRoles = ['Student', 'Supervisor'];
           if (row.role && !allowedRoles.includes(row.role))
             errors.push(`Row ${rowNum}: role "${row.role}" ไม่ถูกต้อง`);
 
@@ -534,11 +532,11 @@ records = parse(req.file.buffer, {
 
           const [result] = await db.query(
             `INSERT INTO users
-               (msu_mail, oauth_provider_id,
+               (msu_mail,
                 role, prefix, first_name, last_name,
                 phone, degree_level, curriculum_year, study_plan_code,
                 account_status)
-             VALUES (?, UUID(), ?, ?, ?, ?, ?, ?, ?, ?, 'Active')`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')`,
             [
               mailLower, row.role,
               row.prefix || null, row.first_name.trim(), row.last_name.trim(),
@@ -595,7 +593,7 @@ records = parse(req.file.buffer, {
 
       // เช็กว่า student มีอยู่จริง
       const [target] = await db.query(
-        `SELECT user_id, role FROM users WHERE user_id = ? AND deleted_at IS NULL`,
+        `SELECT user_id, role FROM users WHERE user_id = ?`,
         [id]
       );
       if (!target.length) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้' });
@@ -607,7 +605,7 @@ records = parse(req.file.buffer, {
         if (!mail || !mail.trim()) return null;
         const [rows] = await db.query(
           `SELECT user_id FROM users
-           WHERE msu_mail = ? AND role = 'Supervisor' AND deleted_at IS NULL`,
+           WHERE msu_mail = ? AND role = 'Supervisor'`,
           [mail.toLowerCase().trim()]
         );
         if (!rows.length) throw new Error(`ไม่พบอาจารย์ที่ปรึกษา: ${mail}`);
@@ -654,68 +652,6 @@ records = parse(req.file.buffer, {
   }
 
   // ============================================================
-  // GET /api/admin/logs
-  // Query params: user_id, action, target_type, target_id,
-  //               date_from, date_to, page, limit
-  // ============================================================
-  static async getLogs(req, res, next) {
-    try {
-      const {
-        user_id, action, target_type, target_id,
-        date_from, date_to,
-        page = 1, limit = 50,
-      } = req.query;
-
-      const offset = (Number(page) - 1) * Number(limit);
-
-      let where = [];
-      const params = [];
-
-      if (user_id)     { where.push('sl.user_id = ?');      params.push(user_id); }
-      if (action)      { where.push('sl.action LIKE ?');     params.push(`%${action}%`); }
-      if (target_type) { where.push('sl.target_type = ?');   params.push(target_type); }
-      if (target_id)   { where.push('sl.target_id = ?');     params.push(target_id); }
-      if (date_from)   { where.push('sl.created_at >= ?');   params.push(date_from); }
-      if (date_to)     { where.push('sl.created_at <= ?');   params.push(date_to); }
-
-      const whereSQL = where.length ? `WHERE ${where.join(' AND ')}` : '';
-
-      const [countRows] = await db.query(
-        `SELECT COUNT(*) AS total FROM system_logs sl ${whereSQL}`,
-        params
-      );
-
-      const [rows] = await db.query(
-        `SELECT
-          sl.log_id, sl.user_id,
-          u.first_name, u.last_name, u.msu_mail, u.role,
-          sl.action, sl.target_type, sl.target_id,
-          sl.detail, sl.ip_address, sl.user_agent,
-          sl.created_at
-         FROM system_logs sl
-         LEFT JOIN users u ON u.user_id = sl.user_id
-         ${whereSQL}
-         ORDER BY sl.created_at DESC
-         LIMIT ? OFFSET ?`,
-        [...params, Number(limit), offset]
-      );
-
-      return res.json({
-        success: true,
-        data: {
-          logs: rows,
-          pagination: {
-            total: Number(countRows[0].total),
-            page:  Number(page),
-            limit: Number(limit),
-            totalPages: Math.ceil(Number(countRows[0].total) / Number(limit)),
-          },
-        },
-      });
-    } catch (err) { next(err); }
-  }
-
-  // ============================================================
   // GET /api/admin/admins
   // Query params: status, search, page, limit
   // ============================================================
@@ -724,7 +660,7 @@ records = parse(req.file.buffer, {
       const { status, search, page = 1, limit = 20 } = req.query;
       const offset = (Number(page) - 1) * Number(limit);
 
-      let where = ["u.deleted_at IS NULL", "u.role IN ('Admin','SuperAdmin')"];
+      let where = ["u.role IN ('Admin','SuperAdmin')"];
       const params = [];
 
       if (status) { where.push('u.account_status = ?'); params.push(status); }
@@ -745,7 +681,7 @@ records = parse(req.file.buffer, {
         `SELECT
           u.user_id, u.username, u.first_name, u.last_name,
           u.msu_mail, u.role, u.account_status,
-          u.created_at, u.last_login_at
+          u.created_at
          FROM users u
          WHERE ${whereSQL}
          ORDER BY u.role DESC, u.created_at ASC
@@ -786,7 +722,7 @@ records = parse(req.file.buffer, {
 
       // เช็ค username ซ้ำ
       const [dupUser] = await db.query(
-        `SELECT user_id FROM users WHERE username = ? AND deleted_at IS NULL`,
+        `SELECT user_id FROM users WHERE username = ?`,
         [username.trim().toLowerCase()]
       );
       if (dupUser.length)
@@ -794,7 +730,7 @@ records = parse(req.file.buffer, {
 
       // เช็ค msu_mail ซ้ำ
       const [dupMail] = await db.query(
-        `SELECT user_id FROM users WHERE msu_mail = ? AND deleted_at IS NULL`,
+        `SELECT user_id FROM users WHERE msu_mail = ?`,
         [msu_mail.trim().toLowerCase()]
       );
       if (dupMail.length)
@@ -840,7 +776,7 @@ records = parse(req.file.buffer, {
 
       const [target] = await db.query(
         `SELECT user_id, role, account_status FROM users
-         WHERE user_id = ? AND deleted_at IS NULL`,
+         WHERE user_id = ?`,
         [id]
       );
       if (!target.length)
@@ -871,7 +807,7 @@ records = parse(req.file.buffer, {
 
       const [target] = await db.query(
         `SELECT user_id, role, account_status FROM users
-         WHERE user_id = ? AND deleted_at IS NULL`,
+         WHERE user_id = ?`,
         [id]
       );
       if (!target.length)
@@ -903,7 +839,7 @@ records = parse(req.file.buffer, {
       const [target] = await db.query(
         `SELECT user_id, role, first_name, last_name, msu_mail
          FROM users
-         WHERE user_id = ? AND deleted_at IS NULL`,
+         WHERE user_id = ?`,
         [id]
       );
       if (!target.length)
@@ -957,7 +893,7 @@ records = parse(req.file.buffer, {
 
       const [target] = await db.query(
         `SELECT user_id, role FROM users
-         WHERE user_id = ? AND deleted_at IS NULL`,
+         WHERE user_id = ?`,
         [id]
       );
       if (!target.length)
@@ -970,7 +906,7 @@ records = parse(req.file.buffer, {
         return res.status(400).json({ success: false, message: 'ผู้ใช้นี้ไม่ใช่ Admin' });
 
       await db.query(
-        `UPDATE users SET deleted_at = NOW() WHERE user_id = ?`,
+        `DELETE FROM users WHERE user_id = ?`,
         [id]
       );
       return res.json({ success: true, message: 'ลบ Admin เรียบร้อยแล้ว' });

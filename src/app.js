@@ -39,10 +39,10 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // API routes
-app.use('/api/v2', routes);
+app.use('/api/v3', routes);
 
-// 404 handler (สำหรับ /api/v2/* ที่ไม่มี)
-app.use('/api/v2', notFoundHandler);
+// 404 handler (สำหรับ /api/v3/* ที่ไม่มี)
+app.use('/api/v3', notFoundHandler);
 
 // Global error handler
 app.use(errorHandler);

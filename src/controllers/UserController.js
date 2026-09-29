@@ -34,14 +34,12 @@ class UserController {
         prefix:        user.prefix        || null,
         firstName:     user.first_name,
         lastName:      user.last_name,
-        faculty:       user.faculty       || null,   
-        department:    user.department     || null,  
+        department:    user.department     || null,
         msuMail:       user.msu_mail,
         phone:         user.phone         || null,
         facebookId:    user.facebook_id   || null,
         lineId:        user.line_id       || null,
         accountStatus: user.account_status,
-        lastLoginAt:   user.last_login_at || null,
       };
 
       // Admin / SuperAdmin — เพิ่ม username
@@ -90,13 +88,10 @@ class UserController {
         return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', message: 'ไม่พบข้อมูลผู้ใช้' });
       }
 
-      const { prefix, first_name, last_name, phone, facebook_id, line_id } = req.body;
+      const { phone, facebook_id, line_id } = req.body;
 
       // Merge: ถ้า field ไม่ได้ส่งมา ใช้ค่าเดิม
       const merged = {
-        prefix:      prefix      !== undefined ? prefix      : user.prefix,
-        first_name:  first_name  !== undefined ? first_name  : user.first_name,
-        last_name:   last_name   !== undefined ? last_name   : user.last_name,
         phone:       phone       !== undefined ? phone       : user.phone,
         facebook_id: facebook_id !== undefined ? facebook_id : user.facebook_id,
         line_id:     line_id     !== undefined ? line_id     : user.line_id,
@@ -104,17 +99,11 @@ class UserController {
 
       await db.query(
         `UPDATE users
-            SET prefix      = ?,
-                first_name  = ?,
-                last_name   = ?,
-                phone       = ?,
+            SET phone       = ?,
                 facebook_id = ?,
                 line_id     = ?
           WHERE user_id = ?`,
         [
-          merged.prefix      || null,
-          merged.first_name  || null,
-          merged.last_name   || null,
           merged.phone       || null,
           merged.facebook_id || null,
           merged.line_id     || null,
@@ -143,7 +132,6 @@ class UserController {
       let where = [
         "u.role = 'Staff'",
         "u.account_status = 'Active'",
-        'u.deleted_at IS NULL',
       ];
       const params = [];
 
@@ -161,7 +149,6 @@ class UserController {
            u.prefix,
            u.first_name,
            u.last_name,
-           u.faculty,
            u.department,
            u.msu_mail,
            u.phone,
@@ -178,7 +165,6 @@ class UserController {
         prefix:     u.prefix      || null,
         firstName:  u.first_name,
         lastName:   u.last_name,
-        faculty:    u.faculty     || null,
         department: u.department  || null,
         msuMail:    u.msu_mail,
         phone:      u.phone       || null,

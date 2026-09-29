@@ -6,5 +6,6 @@ node_modules
 .vscode
 .idea
 uploads
+data
 test-insert
 coverage

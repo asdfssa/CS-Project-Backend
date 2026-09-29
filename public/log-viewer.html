@@ -265,7 +265,7 @@
                 const level = document.getElementById('levelFilter').value;
                 const limit = document.getElementById('limitFilter').value;
                 
-                const response = await fetch(`/api/v2/logs?level=${level}&limit=${limit}`);
+                const response = await fetch(`/api/v3/logs?level=${level}&limit=${limit}`);
                 const data = await response.json();
                 
                 displayLogs(data.logs);
@@ -279,7 +279,7 @@
 
         async function updateStats() {
             try {
-                const response = await fetch('/api/v2/logs/stats');
+                const response = await fetch('/api/v3/logs/stats');
                 const stats = await response.json();
                 
                 document.getElementById('infoCount').textContent = stats.INFO;
@@ -330,7 +330,7 @@
 
         async function clearLogs() {
             try {
-                await fetch('/api/v2/logs', { method: 'DELETE' });
+                await fetch('/api/v3/logs', { method: 'DELETE' });
                 await fetchLogs();
             } catch (error) {
                 console.error('Error clearing logs:', error);

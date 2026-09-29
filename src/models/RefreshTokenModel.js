@@ -11,12 +11,12 @@ class RefreshTokenModel {
   /**
    * บันทึก refresh token ใหม่ลง DB
    */
-  static async create({ userId, tokenHash, expiresAt, ipAddress, userAgent }) {
+  static async create({ userId, tokenHash, expiresAt }) {
     const [result] = await db.query(
       `INSERT INTO auth_tokens
-        (user_id, token_type, token_hash, expires_at, ip_address, user_agent)
-       VALUES (?, 'Refresh', ?, ?, ?, ?)`,
-      [userId, tokenHash, expiresAt, ipAddress || null, userAgent || null]
+        (user_id, token_type, token_hash, expires_at)
+       VALUES (?, 'Refresh', ?, ?)`,
+      [userId, tokenHash, expiresAt]
     );
     return result.insertId;
   }
@@ -26,7 +26,7 @@ class RefreshTokenModel {
    */
   static async findByHash(tokenHash) {
     const [rows] = await db.query(
-      `SELECT token_id, user_id, token_hash, expires_at, ip_address, user_agent, created_at
+      `SELECT token_id, user_id, token_hash, expires_at
          FROM auth_tokens
         WHERE token_hash = ?
           AND token_type = 'Refresh'

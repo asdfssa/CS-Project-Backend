@@ -39,11 +39,6 @@ module.exports = {
     maxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS, 10) || 5,
   },
 
-  login: {
-    maxAttempts: parseInt(process.env.LOGIN_MAX_ATTEMPTS, 10) || 5,
-    lockoutMinutes: parseInt(process.env.LOGIN_LOCKOUT_MINUTES, 10) || 15,
-  },
-
   mail: {
     mode: process.env.MAIL_MODE || 'console',
     from: process.env.MAIL_FROM || 'noreply@example.com',
@@ -67,9 +62,15 @@ module.exports = {
       process.env.SCOPUS_API_KEY_1,
       process.env.SCOPUS_API_KEY_2,
       process.env.SCOPUS_API_KEY_3,
+      process.env.SCOPUS_API_KEY_4,
+      process.env.SCOPUS_API_KEY_5,
+      process.env.SCOPUS_API_KEY_6,
+      process.env.SCOPUS_API_KEY_7,
+      process.env.SCOPUS_API_KEY_8,
+      process.env.SCOPUS_API_KEY_9,
+      process.env.SCOPUS_API_KEY_10,
     ].filter(Boolean),
     baseUrl: 'https://api.elsevier.com',
-    cacheExpiryDays: 7,
   },
 
   scraper: {

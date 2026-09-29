@@ -9,10 +9,13 @@ const path = require('path');
 const fs = require('fs');
 const { parse } = require('csv-parse/sync');
 const { serverError } = require('../utils/errorResponse');
+const { verifyFileType, MIME_TO_EXT } = require('../middlewares/upload');
 
 // -------------------------------------------------------
 // Multer config สำหรับ evidence file (PDF, JPG, PNG, WEBP)
 // บันทึกลง uploads/unwanted/evidence/
+// นามสกุลไฟล์ยึดตาม MIME ที่ fileFilter อนุมัติเท่านั้น ไม่ใช้นามสกุลจาก client (กัน
+// stored XSS จากไฟล์ .html/.svg ปลอม Content-Type — ดูรายละเอียดที่ middlewares/upload.js)
 // -------------------------------------------------------
 const EVIDENCE_ALLOWED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
@@ -23,8 +26,8 @@ const evidenceStorage = multer.diskStorage({
     cb(null, dir);
   },
   filename: (req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-    cb(null, `${Date.now()}_${safeName}`);
+    const ext = MIME_TO_EXT[file.mimetype] || '.bin';
+    cb(null, `${Date.now()}${ext}`);
   },
 });
 
@@ -60,7 +63,7 @@ class UnwantedJournalController {
           unwanted_id, issn, journal_name, publisher,
           note, recorded_date, created_at
          FROM msu_unwanted_journals
-         WHERE issn = ? AND deleted_at IS NULL
+         WHERE issn = ?
          LIMIT 1`,
         [issn]
       );
@@ -86,7 +89,7 @@ class UnwantedJournalController {
       const { search, page = 1, limit = 20 } = req.query;
       const offset = (Number(page) - 1) * Number(limit);
 
-      let where = ['uj.deleted_at IS NULL'];
+      let where = ['1=1'];
       const params = [];
 
       if (search) {
@@ -140,8 +143,16 @@ class UnwantedJournalController {
   static async createOne(req, res, next) {
     uploadEvidence(req, res, async (err) => {
       if (err) {
-        const status = err.code === 'LIMIT_FILE_SIZE' ? 400 : 400;
-        return res.status(status).json({ success: false, message: err.message });
+        return res.status(400).json({ success: false, message: err.message });
+      }
+
+      // เช็ค magic bytes จริง — fileFilter เช็คได้แค่ Content-Type ที่ client ส่งมา ปลอมได้
+      if (req.file && !(await verifyFileType(req.file.path))) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'ไฟล์หลักฐานมีเนื้อหาไม่ตรงกับประเภทไฟล์ที่ประกาศไว้ (รองรับเฉพาะ PDF, JPG, PNG, WEBP)',
+        });
       }
 
       try {
@@ -155,7 +166,7 @@ class UnwantedJournalController {
         if (issn?.trim()) {
           const [dup] = await db.query(
             `SELECT unwanted_id FROM msu_unwanted_journals
-             WHERE issn = ? AND deleted_at IS NULL`,
+             WHERE issn = ?`,
             [issn.trim()]
           );
           if (dup.length) {
@@ -235,7 +246,7 @@ class UnwantedJournalController {
           if (row.issn?.trim()) {
             const [dup] = await db.query(
               `SELECT unwanted_id FROM msu_unwanted_journals
-               WHERE issn = ? AND deleted_at IS NULL`,
+               WHERE issn = ?`,
               [row.issn.trim()]
             );
             if (dup.length) errors.push(`Row ${rowNum}: ISSN ${row.issn} มีอยู่ในรายการแล้ว`);
@@ -298,11 +309,20 @@ class UnwantedJournalController {
         return res.status(400).json({ success: false, message: err.message });
       }
 
+      // เช็ค magic bytes จริง — fileFilter เช็คได้แค่ Content-Type ที่ client ส่งมา ปลอมได้
+      if (req.file && !(await verifyFileType(req.file.path))) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({
+          success: false,
+          message: 'ไฟล์หลักฐานมีเนื้อหาไม่ตรงกับประเภทไฟล์ที่ประกาศไว้ (รองรับเฉพาะ PDF, JPG, PNG, WEBP)',
+        });
+      }
+
       try {
         const { id } = req.params;
         const [target] = await db.query(
           `SELECT * FROM msu_unwanted_journals
-           WHERE unwanted_id = ? AND deleted_at IS NULL`,
+           WHERE unwanted_id = ?`,
           [id]
         );
         if (!target.length) {
@@ -371,7 +391,7 @@ class UnwantedJournalController {
       const { id } = req.params;
       const [rows] = await db.query(
         `SELECT evidence_file_path FROM msu_unwanted_journals
-         WHERE unwanted_id = ? AND deleted_at IS NULL`,
+         WHERE unwanted_id = ?`,
         [id]
       );
 
@@ -386,29 +406,28 @@ class UnwantedJournalController {
       if (!fs.existsSync(absPath))
         return res.status(404).json({ success: false, message: 'ไม่พบไฟล์บนเซิร์ฟเวอร์' });
 
-      return res.sendFile(absPath);
+      // บังคับ Content-Disposition: attachment เสมอ — กัน browser เปิด/render ไฟล์แทน download ตรงๆ
+      return res.download(absPath, `evidence${path.extname(absPath)}`);
     } catch (err) { next(err); }
   }
 
   // ============================================================
-  // DELETE /api/admin/unwanted-journals/:id  (soft delete)
+  // DELETE /api/admin/unwanted-journals/:id  (hard delete)
   // ============================================================
   static async deleteOne(req, res, next) {
     try {
       const { id } = req.params;
       const [target] = await db.query(
         `SELECT unwanted_id FROM msu_unwanted_journals
-         WHERE unwanted_id = ? AND deleted_at IS NULL`,
+         WHERE unwanted_id = ?`,
         [id]
       );
       if (!target.length)
         return res.status(404).json({ success: false, message: 'ไม่พบวารสาร' });
 
       await db.query(
-        `UPDATE msu_unwanted_journals
-         SET deleted_at = NOW(), deleted_by = ?
-         WHERE unwanted_id = ?`,
-        [req.user.sub, id]
+        `DELETE FROM msu_unwanted_journals WHERE unwanted_id = ?`,
+        [id]
       );
 
       return res.json({ success: true, message: 'ลบวารสารเรียบร้อยแล้ว' });

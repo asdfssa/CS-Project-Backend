@@ -27,8 +27,6 @@ class AuthController {
       const result = await AuthService.login({
         username,
         password,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
       });
 
       return res.json({
@@ -58,8 +56,6 @@ class AuthController {
       const result = await AuthService.verifyOtp({
         userId: req.otpUserId,
         otpCode,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
       });
 
       // เก็บ refresh token ใน httpOnly cookie
@@ -85,8 +81,6 @@ class AuthController {
     try {
       const result = await AuthService.resendOtp({
         userId: req.otpUserId,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
       });
 
       return res.json({
@@ -110,8 +104,6 @@ class AuthController {
       const { idToken } = req.body;
       const result = await AuthService.googleLogin({
         idToken,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
       });
 
       // เก็บ refresh token ใน httpOnly cookie
@@ -141,8 +133,6 @@ class AuthController {
 
       const result = await AuthService.refreshToken({
         refreshToken,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
       });
 
       // Rotate: set refresh token ใหม่ใน cookie
@@ -181,7 +171,6 @@ static async me(req, res, next) {
       msuMail:       user.msu_mail,
       phone:         user.phone         || null,
       accountStatus: user.account_status,
-      lastLoginAt:   user.last_login_at || null,
     };
 
     // Admin / SuperAdmin — เพิ่ม username
@@ -241,8 +230,6 @@ static async me(req, res, next) {
       const { username } = req.body;
       const result = await AuthService.requestPasswordReset({
         username,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
       });
 
       return res.json({
@@ -271,8 +258,6 @@ static async me(req, res, next) {
         userId: req.resetUserId,
         otpCode,
         newPassword,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
       });
 
       // Clear refresh token cookie ถ้ามี (บังคับ logout session ปัจจุบันด้วย)
@@ -295,8 +280,6 @@ static async me(req, res, next) {
       const { idToken } = req.body;
       const result = await AuthService.registerStaff({
         idToken,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
       });
 
 return res.status(201).json({

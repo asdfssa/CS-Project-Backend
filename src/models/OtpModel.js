@@ -1,12 +1,12 @@
 const db = require('../config/database');
 
 class OtpModel {
-  static async create({ userId, otpHash, purpose, expiresAt, ipAddress, userAgent }) {
+  static async create({ userId, otpHash, purpose, expiresAt }) {
     const [result] = await db.query(
       `INSERT INTO otp_requests
-          (user_id, otp_hash, purpose, expires_at, ip_address, user_agent)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [userId, otpHash, purpose, expiresAt, ipAddress, userAgent]
+          (user_id, otp_hash, purpose, expires_at)
+       VALUES (?, ?, ?, ?)`,
+      [userId, otpHash, purpose, expiresAt]
     );
     return result.insertId;
   }
@@ -49,6 +49,21 @@ class OtpModel {
           AND used_at IS NULL`,
       [userId, purpose]
     );
+  }
+
+  /**
+   * ลบ OTP ที่ไม่มีประโยชน์แล้วออก (cleanup กัน DB บวม) — ลบทั้งแถวที่หมดอายุ
+   * (ไม่ว่าจะเคยใช้หรือไม่) และแถวที่ใช้ไปแล้วนานพอ (เผื่อ retention สำหรับ debug)
+   */
+  static async deleteExpired() {
+    const RETENTION_DAYS = 7; // ponytail: ตัวเลขเผื่อ debug ย้อนหลัง ปรับได้ถ้าต้องการ
+    const [result] = await db.query(
+      `DELETE FROM otp_requests
+        WHERE expires_at < NOW()
+           OR (used_at IS NOT NULL AND used_at < DATE_SUB(NOW(), INTERVAL ? DAY))`,
+      [RETENTION_DAYS]
+    );
+    return result.affectedRows;
   }
 }
 

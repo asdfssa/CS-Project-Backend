@@ -54,7 +54,7 @@ journal-watch-backend/
 │   ├── services/               # Business logic (auth, mail, Scopus/TCI fetch & scrape)
 │   ├── utils/                   # Helpers (logger, jwt, crypto, date, error response)
 │   ├── validators/              # Input validation rules
-│   ├── app.js                   # Express app setup (middleware, mount routes ที่ /api/v2)
+│   ├── app.js                   # Express app setup (middleware, mount routes ที่ /api/v3)
 │   └── server.js                # Entry point
 ├── tests/                       # Tests
 ├── .env.example                 # Template ของ environment vars
@@ -115,11 +115,11 @@ npm test
 
 เปิดเบราว์เซอร์ที่ `http://localhost:<PORT>` เพื่อทดสอบผ่านหน้า UI ง่าย ๆ ใน `public/`
 
-ทุก endpoint ของ API ถูก mount ไว้ที่ prefix **`/api/v2`**
+ทุก endpoint ของ API ถูก mount ไว้ที่ prefix **`/api/v3`**
 
 ## API Endpoints
 
-### Authentication — `/api/v2/auth`
+### Authentication — `/api/v3/auth`
 
 | Method | Path | คำอธิบาย | Auth |
 |---|---|---|---|
@@ -134,7 +134,7 @@ npm test
 | POST | `/forgot-password` | ขอ OTP รีเซ็ตรหัสผ่าน (Admin/SuperAdmin) | - |
 | POST | `/reset-password` | ตั้งรหัสผ่านใหม่ด้วย OTP | Reset token |
 
-### Journal Lookup — `/api/v2/journal`
+### Journal Lookup — `/api/v3/journal`
 
 | Method | Path | คำอธิบาย | Auth |
 |---|---|---|---|
@@ -144,7 +144,7 @@ npm test
 | GET | `/tci/scrape` | ค้นหา TCI ด้วยวิธี scraping | Access token |
 | GET | `/proxy-status` | สถานะการหมุน API key / rate limit ของ Scopus | Access token |
 
-### Unwanted / Predatory Journals — `/api/v2/unwanted-journals`
+### Unwanted / Predatory Journals — `/api/v3/unwanted-journals`
 
 | Method | Path | คำอธิบาย | Auth |
 |---|---|---|---|
@@ -156,7 +156,7 @@ npm test
 | PATCH | `/:id` | แก้ไขรายการ | Admin/SuperAdmin/Staff |
 | DELETE | `/:id` | ลบรายการ | Admin/SuperAdmin/Staff |
 
-### Pre-T3 — `/api/v2/pre-t3`
+### Pre-T3 — `/api/v3/pre-t3`
 
 | Method | Path | คำอธิบาย | Auth |
 |---|---|---|---|
@@ -170,7 +170,7 @@ npm test
 | PATCH | `/:id/resubmit` | ยื่นใหม่หลังถูกตีกลับ | Student |
 | PATCH | `/:id/cancel` | ยกเลิกคำร้องของตัวเอง | Student |
 
-### T3 — `/api/v2/t3` (workflow เดียวกับ Pre-T3 แต่รองรับแนบไฟล์)
+### T3 — `/api/v3/t3` (workflow เดียวกับ Pre-T3 แต่รองรับแนบไฟล์)
 
 | Method | Path | คำอธิบาย | Auth |
 |---|---|---|---|
@@ -184,7 +184,7 @@ npm test
 | PATCH | `/:id/faculty-review` | เจ้าหน้าที่คณะตัดสิน | Staff |
 | PATCH | `/:id/cancel` | ยกเลิกคำร้องของตัวเอง | Student |
 
-### File Upload — `/api/v2/upload`
+### File Upload — `/api/v3/upload`
 
 | Method | Path | คำอธิบาย | Auth |
 |---|---|---|---|
@@ -192,7 +192,7 @@ npm test
 | DELETE | `/t3/:id/files/:field` | ลบไฟล์แนบ | Student |
 | GET | `/t3/:id/files/:field` | ดาวน์โหลด/ดูไฟล์แนบ | ผู้เกี่ยวข้อง/Admin |
 
-### User Management — `/api/v2/manage/users` (Admin/SuperAdmin/Staff)
+### User Management — `/api/v3/manage/users` (Admin/SuperAdmin/Staff)
 
 | Method | Path | คำอธิบาย | Auth |
 |---|---|---|---|
@@ -205,7 +205,7 @@ npm test
 | PATCH | `/:id/advisors` | ตั้งค่าอาจารย์ที่ปรึกษา | Admin/SuperAdmin/Staff |
 | PATCH | `/:id` | แก้ไขข้อมูลผู้ใช้ | Admin/SuperAdmin/Staff |
 
-### Admin — `/api/v2/admin` (Admin/SuperAdmin เท่านั้น)
+### Admin — `/api/v3/admin` (Admin/SuperAdmin เท่านั้น)
 
 | Method | Path | คำอธิบาย |
 |---|---|---|
@@ -222,15 +222,15 @@ npm test
 
 | Method | Path | คำอธิบาย | Auth |
 |---|---|---|---|
-| GET | `/api/v2/user/profile` | โปรไฟล์ของตัวเอง | ทุก role |
-| GET | `/api/v2/user/staff` | รายชื่อ staff/อาจารย์ | ทุก role |
-| PATCH | `/api/v2/user/profile` | แก้ไขโปรไฟล์ตัวเอง | ทุก role |
-| POST | `/api/v2/bug-reports` | แจ้งบั๊ก | ทุก role |
-| GET | `/api/v2/bug-reports/my` | รายการที่แจ้งเอง | ทุก role |
-| GET | `/api/v2/bug-reports` | รายการทั้งหมด | Admin/SuperAdmin |
-| PATCH | `/api/v2/bug-reports/:id/status` | อัปเดตสถานะบั๊ก | Admin/SuperAdmin |
-| GET/DELETE | `/api/v2/logs` | Log viewer สำหรับ dev (in-memory, ไม่ auth) | - |
-| GET | `/api/v2/health` | Health check | - |
+| GET | `/api/v3/user/profile` | โปรไฟล์ของตัวเอง | ทุก role |
+| GET | `/api/v3/user/staff` | รายชื่อ staff/อาจารย์ | ทุก role |
+| PATCH | `/api/v3/user/profile` | แก้ไขโปรไฟล์ตัวเอง | ทุก role |
+| POST | `/api/v3/bug-reports` | แจ้งบั๊ก | ทุก role |
+| GET | `/api/v3/bug-reports/my` | รายการที่แจ้งเอง | ทุก role |
+| GET | `/api/v3/bug-reports` | รายการทั้งหมด | Admin/SuperAdmin |
+| PATCH | `/api/v3/bug-reports/:id/status` | อัปเดตสถานะบั๊ก | Admin/SuperAdmin |
+| GET/DELETE | `/api/v3/logs` | Log viewer สำหรับ dev (in-memory, ไม่ auth) | - |
+| GET | `/api/v3/health` | Health check | - |
 
 ## Login Flow
 
@@ -240,7 +240,7 @@ npm test
 │  Username +  │
 │  Password    │
 └──────┬───────┘
-       │ POST /api/v2/auth/login
+       │ POST /api/v3/auth/login
        ▼
 ┌──────────────┐
 │  Server      │
@@ -256,7 +256,7 @@ npm test
 │   Step 2     │
 │   Enter OTP  │
 └──────┬───────┘
-       │ POST /api/v2/auth/verify-otp
+       │ POST /api/v3/auth/verify-otp
        │ Header: Bearer <otpToken>
        │ Body:   { otpCode }
        ▼

@@ -8,8 +8,7 @@
  *   GET    /api/t3/pending                  → Advisor/Staff ดูรายการรออนุมัติ
  *   GET    /api/t3/:id                      → ดูรายละเอียด
  *   PATCH  /api/t3/:id/advisor-review       → Advisor อนุมัติ/ปฏิเสธ
- *   PATCH  /api/t3/:id/faculty-review       → Staff บันทึกมติ Faculty Com
- *   PATCH  /api/t3/:id/grad-school-review   → Staff บันทึกผล Grad School (จากอีเมล)
+ *   PATCH  /api/t3/:id/faculty-review       → Staff บันทึกมติ Faculty Com (ผลสุดท้ายของ T3)
  */
 const path = require('path');
 const fs   = require('fs');
@@ -20,6 +19,7 @@ const MailService = require('../services/MailService');
 const db          = require('../config/database');
 const { serverError } = require('../utils/errorResponse');
 const { toMysqlDate } = require('../utils/date');
+const { verifyFileType, MIME_TO_EXT } = require('../middlewares/upload');
 
 const FIELD_TO_KEY = {
   acceptance_letter:  'acceptance_letter_path',
@@ -151,12 +151,6 @@ class T3Controller {
         return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', message: 'ไม่พบข้อมูลผู้ใช้' });
       }
 
-      const studentSnapshot = {
-        degree_level:    student.degree_level,
-        study_plan_code: student.study_plan_code,
-        curriculum_year: student.curriculum_year,
-      };
-
       // ดึง Advisor ของนิสิต
       const [advisorRows] = await db.query(
         `SELECT advisor_id, advisor_type
@@ -173,14 +167,9 @@ class T3Controller {
         return res.status(400).json({ success: false, code: 'NO_MAJOR_ADVISOR', message: 'บัญชีนี้ยังไม่มีที่ปรึกษาหลัก (Major Advisor) กรุณาติดต่อ Admin' });
       }
 
-      const issn = journal_snapshot.issn;
-
       const t3Id = await T3Model.create(
         studentId,
         pre_t3_id,
-        issn,
-        journal_snapshot,
-        studentSnapshot,
         paper_and_research_details,
         publication_details,
         journal_metrics,
@@ -343,7 +332,7 @@ class T3Controller {
         });
         // แจ้ง Staff ทุกคน
         const [staffRows] = await db.query(
-          `SELECT msu_mail FROM users WHERE role = 'Staff' AND account_status = 'Active' AND deleted_at IS NULL`
+          `SELECT msu_mail FROM users WHERE role = 'Staff' AND account_status = 'Active'`
         );
         for (const staff of staffRows) {
           MailService.sendT3Notification(staff.msu_mail, 'faculty_pending', {
@@ -351,6 +340,26 @@ class T3Controller {
             journalName,
             articleTitle,
             t3Id,
+          });
+        }
+      }
+
+      // ถ้าคนที่เพิ่งอนุมัติ/ปฏิเสธคือที่ปรึกษาหลัก → แจ้งเตือน co-advisor (ถ้ามี) เฉยๆ
+      // ว่าที่ปรึกษาหลักตัดสินใจแล้ว เผื่อทั้ง 3 คนคุยกันนอกระบบไปแล้วแต่ที่ปรึกษาหลัก
+      // ลืมกดในระบบ — co-advisor จะได้รู้และไปทวงถามได้
+      if (mySlot === row.advisor_approval) {
+        const notifyEvent = action === 'approve' ? 'major_advisor_approved' : 'major_advisor_rejected';
+        const coAdvisorSlots = [row.co_advisor_1_approval, row.co_advisor_2_approval];
+        for (const slot of coAdvisorSlots) {
+          if (!slot?.user_id) continue;
+          const coAdvisor = await UserModel.findById(slot.user_id);
+          if (!coAdvisor) continue;
+          MailService.sendT3Notification(coAdvisor.msu_mail, notifyEvent, {
+            studentName: `${student.first_name} ${student.last_name}`,
+            journalName,
+            articleTitle,
+            t3Id,
+            remark,
           });
         }
       }
@@ -458,7 +467,14 @@ class T3Controller {
         });
       }
 
-      await T3Model.cancel(t3Id);
+      const ok = await T3Model.cancel(t3Id);
+      if (!ok) {
+        return res.status(400).json({
+          success: false,
+          code: 'INVALID_STATE',
+          message: 'ไม่สามารถยกเลิกได้ T3 ถูกเปลี่ยนสถานะไปแล้ว',
+        });
+      }
 
       return res.json({ success: true, message: 'ยกเลิก T3 เรียบร้อยแล้ว' });
     } catch (err) {
@@ -553,12 +569,6 @@ class T3Controller {
         return res.status(404).json({ success: false, code: 'USER_NOT_FOUND', message: 'ไม่พบข้อมูลผู้ใช้' });
       }
 
-      const studentSnapshot = {
-        degree_level:    student.degree_level,
-        study_plan_code: student.study_plan_code,
-        curriculum_year: student.curriculum_year,
-      };
-
       const [advisorRows] = await db.query(
         `SELECT advisor_id, advisor_type
            FROM advisor_assignments
@@ -574,14 +584,9 @@ class T3Controller {
         return res.status(400).json({ success: false, code: 'NO_MAJOR_ADVISOR', message: 'บัญชีนี้ยังไม่มีที่ปรึกษาหลัก (Major Advisor) กรุณาติดต่อ Admin' });
       }
 
-      const issn = journal_snapshot.issn;
-
       const t3Id = await T3Model.create(
         studentId,
         pre_t3_id,
-        issn,
-        journal_snapshot,
-        studentSnapshot,
         paper_and_research_details,
         publication_details,
         journal_metrics,
@@ -601,9 +606,21 @@ class T3Controller {
           const key = FIELD_TO_KEY[fieldName];
           if (!key) continue;
 
-          const file     = fileArr[0];
-          const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
-          const filename = `${Date.now()}_${safeName}`;
+          const file = fileArr[0];
+
+          // เช็ค magic bytes จริง — fileFilter เช็คได้แค่ Content-Type ที่ client ส่งมา ปลอมได้
+          const isValidType = await verifyFileType(file.buffer);
+          if (!isValidType) {
+            return res.status(400).json({
+              success: false,
+              code: 'INVALID_FILE_CONTENT',
+              message: `ไฟล์ "${fieldName}" มีเนื้อหาไม่ตรงกับประเภทไฟล์ที่ประกาศไว้ (รองรับเฉพาะ PDF, JPG, PNG, WEBP)`,
+            });
+          }
+
+          // นามสกุลไฟล์ที่เก็บจริง ยึดตาม MIME ที่ fileFilter อนุมัติ ไม่ใช้นามสกุลจาก client
+          const ext      = MIME_TO_EXT[file.mimetype] || '.bin';
+          const filename = `${Date.now()}${ext}`;
           const dir      = path.join(process.cwd(), 'uploads', 't3', String(t3Id), fieldName);
 
           fs.mkdirSync(dir, { recursive: true });
@@ -710,9 +727,6 @@ class T3Controller {
       co_advisor_1_approval:      parseJson(row.co_advisor_1_approval),
       co_advisor_2_approval:      parseJson(row.co_advisor_2_approval),
       faculty_com_approval:       parseJson(row.faculty_com_approval),
-      grad_school_approval:       parseJson(row.grad_school_approval),
-      submission_date:            row.submission_date,
-      submission_round_cutoff:    row.submission_round_cutoff,
       created_at:                 row.created_at,
       updated_at:                 row.updated_at,
     };

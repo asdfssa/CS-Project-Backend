@@ -8,7 +8,7 @@ const router         = express.Router();
 const UserController = require('../controllers/UserController');
 const { requireAuth, requireRole } = require('../middlewares/auth');
 
-const ALL_ROLES = ['Student', 'Supervisor', 'Program_Chair', 'Staff', 'Admin', 'SuperAdmin'];
+const ALL_ROLES = ['Student', 'Supervisor', 'Staff', 'Admin', 'SuperAdmin'];
 
 // -------------------------------------------------------
 // ดูโปรไฟล์ตัวเอง

@@ -22,82 +22,85 @@
 - [x] Migration: `DROP TABLE journals_cache` (แก้ที่ `db/init/001_schema.sql` โดยตรง — ยืนยันแล้วว่าไฟล์นี้คือ schema ที่ใช้จริงสำหรับ Pro2)
 
 ### A2. Scopus Rate Limit ออกแบบใหม่
-- [ ] `.env` / `config/index.js` — ขยาย `SCOPUS_API_KEY_1..10` (จาก 3 → 10 keys)
-- [ ] `ScopusProxyService.js` — เพิ่ม per-second throttle (5 req/วิ/key), ชน cap ข้าม key ทันที
-- [ ] `ScopusProxyService.js` — เลิกนับ weekly quota เอง เปลี่ยนไปอ่านจาก header `X-RateLimit-Limit/Remaining/Reset` ของ Elsevier หลังทุก request
-- [ ] `ScopusProxyService.js` — persist state ลงไฟล์ JSON บน disk (write-through) แทน RAM ล้วนๆ
-- [ ] `ScopusProxyService.js` — เลิกใช้ `setInterval`/`setTimeout` เปลี่ยนเป็น lazy-check ใน `getNextKey()`
-- [ ] `ScopusService.js` — แก้ call site ให้ await `getNextKey()`/`incrementUsage()`/`markKeyUnavailable()` (เปลี่ยนเป็น async)
-- [ ] คง logic เดิม: 429 จริงที่หลุดรอด (หลัง throttle) ยัง block 1 ชม. เหมือนเดิม
+- [x] `.env` / `config/index.js` — ขยาย `SCOPUS_API_KEY_1..10` (จาก 3 → 10 keys)
+- [x] `ScopusProxyService.js` — เพิ่ม per-second throttle (5 req/วิ/key), ชน cap ข้าม key ทันที
+- [x] `ScopusProxyService.js` — เลิกนับ weekly quota เอง เปลี่ยนไปอ่านจาก header `X-RateLimit-Limit/Remaining/Reset` ของ Elsevier หลังทุก request
+- [x] `ScopusProxyService.js` — persist state ลงไฟล์ JSON บน disk (write-through) แทน RAM ล้วนๆ
+- [x] `ScopusProxyService.js` — เลิกใช้ `setInterval`/`setTimeout` เปลี่ยนเป็น lazy-check ใน `getNextKey()`
+- [x] `ScopusService.js` — แก้ call site ให้ await `getNextKey()`/`incrementUsage()`/`markKeyUnavailable()` (เปลี่ยนเป็น async)
+- [x] คง logic เดิม: 429 จริงที่หลุดรอด (หลัง throttle) ยัง block 1 ชม. เหมือนเดิม
 
 ### A3. ตัดระบบที่ไม่อยู่ใน proposal scope
-- [ ] ลบ `BugReportModel.js`, `BugReportController.js`, `bugReportRoutes.js` ทั้งไฟล์
-- [ ] `routes/index.js` — ตัดจุด register `bugReportRoutes`
-- [ ] Migration: `DROP TABLE bug_reports`
-- [ ] ลบ `SystemLogModel.js` ทั้งไฟล์
-- [ ] `AdminController.js` — ตัด endpoint `GET /api/admin/logs` (`getLogs`)
-- [ ] `AuthService.js` — ตัดทุกจุดที่เรียก `SystemLogModel.log(...)`
-- [ ] Migration: `DROP TABLE system_logs`
-- [ ] Migration: `DROP TABLE email_notifications` (ไม่มีโค้ดอ้างถึงเลย)
+- [x] ลบ `BugReportModel.js`, `BugReportController.js`, `bugReportRoutes.js` ทั้งไฟล์
+- [x] `routes/index.js` — ตัดจุด register `bugReportRoutes`
+- [x] Migration: `DROP TABLE bug_reports` (แก้ที่ `db/init/001_schema.sql` โดยตรง — table ยังไม่เคย apply จริง)
+- [x] ลบ `SystemLogModel.js` ทั้งไฟล์
+- [x] `AdminController.js` — ตัด endpoint `GET /api/admin/logs` (`getLogs`)
+- [x] `AuthService.js` — ตัดทุกจุดที่เรียก `SystemLogModel.log(...)`
+- [x] Migration: `DROP TABLE system_logs` (แก้ที่ `db/init/001_schema.sql` โดยตรง)
+- [x] Migration: `DROP TABLE email_notifications` (ไม่มีโค้ดอ้างถึงเลย — แก้ที่ `db/init/001_schema.sql` โดยตรง)
 
 ### A4. ตัด Login Lockout Tracking
-- [ ] Migration: ตัด column `users.failed_login_attempts`, `locked_until`, `last_login_at`, `last_login_ip`
-- [ ] `UserModel.js` — ลบ `isLocked()`, `incrementFailedAttempts()`
-- [ ] `AuthService.login()` — ตัดจุดเรียก `isLocked()`/`incrementFailedAttempts()`
+- [x] Migration: ตัด column `users.failed_login_attempts`, `locked_until`, `last_login_at`, `last_login_ip` (แก้ที่ `db/init/001_schema.sql` โดยตรง)
+- [x] `UserModel.js` — ลบ `isLocked()`, `incrementFailedAttempts()`
+- [x] `AuthService.login()` — ตัดจุดเรียก `isLocked()`/`incrementFailedAttempts()`
+- [x] (เพิ่มเติมนอกเหนือ checklist) `UserModel.resetFailedAttempts()` ก็ต้องลบด้วย เพราะเขียนทับ 4 column เดียวกันที่ตัดไปแล้ว — ลบพร้อม call site ใน `AuthService.js` ทั้ง login + googleLogin flow
+- [x] ลบ `config.login` (maxAttempts/lockoutMinutes) ที่ตายจาก A4 นี้ + `LOGIN_MAX_ATTEMPTS`/`LOGIN_LOCKOUT_MINUTES` ใน `.env.example`
+- [x] ลบ field `lastLoginAt`/`last_login_at` ที่เหลือค้างใน `AdminController.js` (2 จุด), `AuthController.js`, `UserController.js`
 
 ### A5. Soft-delete → Hard-delete
-- [ ] `users.deleted_at` — เปลี่ยนทุก `UPDATE ... SET deleted_at = NOW()` เป็น `DELETE FROM users`
-- [ ] ไล่ทุก `WHERE deleted_at IS NULL` ที่เกี่ยวกับ `users` ออก (เพราะแถวที่ลบจะหายไปเลย ไม่ต้อง filter)
-- [ ] `msu_unwanted_journals.deleted_at`/`deleted_by` — เปลี่ยนเป็น hard delete เหมือนกัน
-- [ ] ไล่ทุก `WHERE deleted_at IS NULL` ของ `msu_unwanted_journals` ออก
-- [ ] เช็ค FK cascade/orphan record ที่อาจเกิดจากการ hard-delete `users` (เช่น `pre_t3_requests.student_id`, `advisor_assignments.advisor_id` ที่อ้างถึง user ที่โดนลบ)
+- [x] `users.deleted_at` — เปลี่ยนทุก `UPDATE ... SET deleted_at = NOW()` เป็น `DELETE FROM users`
+- [x] ไล่ทุก `WHERE deleted_at IS NULL` ที่เกี่ยวกับ `users` ออก (เพราะแถวที่ลบจะหายไปเลย ไม่ต้อง filter)
+- [x] `msu_unwanted_journals.deleted_at`/`deleted_by` — เปลี่ยนเป็น hard delete เหมือนกัน
+- [x] ไล่ทุก `WHERE deleted_at IS NULL` ของ `msu_unwanted_journals` ออก
+- [x] เช็ค FK cascade/orphan record ที่อาจเกิดจากการ hard-delete `users` (เช่น `pre_t3_requests.student_id`, `advisor_assignments.advisor_id` ที่อ้างถึง user ที่โดนลบ) — ผลเช็ค: schema เดิมตั้งไว้ปลอดภัยอยู่แล้ว `advisor_assignments`/`pre_t3_requests`/`t3_requests.student_id`/`msu_unwanted_journals.created_by` เป็น `ON DELETE RESTRICT` (กันลบ user ที่มีข้อมูลอ้างอิงอยู่), `otp_requests`/`auth_tokens` เป็น `CASCADE` (ถูกต้อง — ไม่มีความหมายถ้า user หาย), `request_approvals.approver_id`/`t3_requests.grad_school_relayed_by` เป็น `SET NULL` (ถูกต้อง) ไม่ต้องแก้ schema เพิ่ม
 
 ### A6. ตัด Column ปลีกย่อย
-- [ ] `advisor_assignments` — ตัด `assigned_at`
-- [ ] `t3_evidence_files` — ตัด `uploaded_at`
-- [ ] `request_approvals` — ตัด enum `'Program_Chair'` ออกจาก `step`, ตัด column `created_at`
-- [ ] `auth_tokens` — ตัด `ip_address`, `user_agent`, `created_at`
-- [ ] `otp_requests` — ตัด `ip_address`, `user_agent`
-- [ ] `users` — ตัด `faculty`, `oauth_provider_id`, `updated_at`
-- [ ] `msu_unwanted_journals` — ตัด `updated_at`
-- [ ] `pre_t3_requests` — ตัด `degree_level`, `curriculum_year`, `study_plan_code` (join ผ่าน `users` แทน)
-- [ ] `t3_requests` — ตัด `issn`, `journal_name`, `degree_level`, `curriculum_year`, `study_plan_code` (join ผ่าน `pre_t3_requests`/`users` แทน)
-- [ ] `t3_requests` — ตัด `grad_school_status`, `grad_school_remark`, `grad_school_decided_at`, `grad_school_relayed_by`, `submission_date`, `submission_round_cutoff`
-- [ ] แก้ query ทุกจุดที่ยังอ้าง column ที่ถูกตัดออกไป (SELECT/INSERT/response builder) ให้ join แทน
-- [ ] `users.department` — **pending รอถามอาจารย์** ก่อนตัดสินใจ
+- [x] `advisor_assignments` — ตัด `assigned_at`
+- [x] `t3_evidence_files` — ตัด `uploaded_at`
+- [x] `request_approvals` — ตัด enum `'Program_Chair'` ออกจาก `step`, ตัด column `created_at`
+- [x] `auth_tokens` — ตัด `ip_address`, `user_agent`, `created_at`
+- [x] `otp_requests` — ตัด `ip_address`, `user_agent`
+- [x] `users` — ตัด `faculty`, `oauth_provider_id`, `updated_at` — เช็คแล้วว่า `oauth_provider_id` เป็น write-only จริง (Admin/import ใส่แค่ `UUID()` สุ่ม ไม่เคยมี Google sub จริง, login ทุก flow match ด้วย `msu_mail` เท่านั้น) ตัดได้โดยไม่กระทบ auth เลย ต้องแก้ CHECK constraint `chk_login_method` ด้วย (เอาเงื่อนไข `oauth_provider_id IS NOT NULL` ออก)
+- [x] `msu_unwanted_journals` — ตัด `updated_at`
+- [x] `pre_t3_requests` — ตัด `degree_level`, `curriculum_year`, `study_plan_code` (join ผ่าน `users` แทน)
+- [x] `t3_requests` — ตัด `issn`, `journal_name`, `degree_level`, `curriculum_year`, `study_plan_code` (join ผ่าน `pre_t3_requests`/`users` แทน)
+- [x] `t3_requests` — ตัด `grad_school_status`, `grad_school_remark`, `grad_school_decided_at`, `grad_school_relayed_by`, `submission_date`, `submission_round_cutoff`
+- [x] แก้ query ทุกจุดที่ยังอ้าง column ที่ถูกตัดออกไป (SELECT/INSERT/response builder) ให้ join แทน
+- [x] `users.department` — ถามอาจารย์แล้ว **ตัดสินใจเก็บไว้** ไม่ต้องแก้โค้ดอะไรเพิ่ม (ดูรายละเอียดที่ A10)
 
 ### A7. ลบ Dead Code
-- [ ] `T3Model.js` — ลบ `gradSchoolReview()`, `updateSubmissionDetails()`, `_buildGradSchoolApproval()` + จุดใช้ใน response object
-- [ ] `T3Model.js` — ลบ `getEvidenceFiles()`
-- [ ] `PreT3Model.create()` — ตัด parameter `studentInfo`/`advisorInfo` ที่ไม่ใช้แล้ว + comment เดิมที่อธิบายว่า unused
-- [ ] `T3Controller.js` header comment — ตัดการอ้างอิง endpoint `grad-school-review` ที่ไม่มีจริง (มาจาก TO_FIX #13)
+- [x] `T3Model.js` — ลบ `gradSchoolReview()`, `updateSubmissionDetails()`, `_buildGradSchoolApproval()` + จุดใช้ใน response object (ทำระหว่าง A6 เพราะ column ที่ฟังก์ชันพวกนี้ใช้ถูกตัดไปแล้ว — ยืนยันแล้วว่าไม่มี route ไหนเรียกทั้งสองฟังก์ชันแรกเลยตั้งแต่ต้น)
+- [x] `T3Model.js` — ลบ `getEvidenceFiles()` (ไม่มี caller ที่ไหนเรียกใช้เลย ยืนยันด้วย grep ทั้ง src/)
+- [x] `PreT3Model.create()` — ตัด parameter `studentInfo`/`advisorInfo` ที่ไม่ใช้แล้ว + comment เดิมที่อธิบายว่า unused (ทำระหว่าง A6 พร้อมกับตัด `studentSnapshot` param ในฟังก์ชันเดียวกัน)
+- [x] `T3Controller.js` header comment — ตัดการอ้างอิง endpoint `grad-school-review` ที่ไม่มีจริง (มาจาก TO_FIX #13)
 
 ### A8. DB Cleanup Job ใหม่ (กัน DB บวม)
-- [ ] `server.js` — เพิ่ม `setInterval` เรียก cleanup ทุก 24 ชม.
-- [ ] ต่อ `RefreshTokenModel.deleteExpired()` เข้า interval นี้
-- [ ] `OtpModel.js` — เขียนฟังก์ชันใหม่ `deleteExpired()` (ลบ `otp_requests` ที่ `expires_at < NOW()` และ `used_at IS NOT NULL` มานานแล้ว)
-- [ ] ต่อ `OtpModel.deleteExpired()` เข้า interval เดียวกัน
+- [x] `server.js` — เพิ่ม `setInterval` เรียก cleanup ทุก 24 ชม.
+- [x] ต่อ `RefreshTokenModel.deleteExpired()` เข้า interval นี้
+- [x] `OtpModel.js` — เขียนฟังก์ชันใหม่ `deleteExpired()` (ลบ `otp_requests` ที่ `expires_at < NOW()` และ `used_at IS NOT NULL` มานานแล้ว) — ตีความเป็น OR ไม่ใช่ AND (ลบทั้งแถวหมดอายุ-ไม่เคยใช้ และแถวที่ใช้ไปแล้วเกิน retention 7 วัน) เพราะ AND ล้วนจะไม่มีทางลบแถวที่หมดอายุแต่ไม่เคยถูกใช้เลย ขัดกับจุดประสงค์ "กัน DB บวม"
+- [x] ต่อ `OtpModel.deleteExpired()` เข้า interval เดียวกัน
 
 ### A9. ยังไม่ปิดจบ / รอข้อมูลเพิ่ม
-- [ ] **ER Diagram** — รอนัด อ.ปนิดา
-- [ ] **T3 ไม่มี resubmit endpoint** — ถามทีมว่าตั้งใจ (T3 reject ต้องยื่นใหม่ทั้งหมด) หรือเป็น feature ที่ยังไม่ได้ทำ
+- [x] **ER Diagram** — นัดกับ อ.ปนิดาแล้ว เสร็จเรียบร้อย
+- [x] **T3 ไม่มี resubmit endpoint** — ถามทีมแล้ว ได้คำตอบ 2 flow:
+  1. T3 reject → ยื่น T3 ใหม่อ้าง `pre_t3_id` เดิม (ที่ Approved อยู่แล้ว) ได้เลย — **เช็คโค้ดแล้วพบว่าทำงานได้อยู่แล้วโดยไม่ต้องแก้อะไร**: `T3Controller.submit()` เช็คแค่ pre_t3 ต้อง Approved + เป็นของนิสิตคนนั้น ไม่เช็คว่าเคยมี T3 มาก่อนไหม และ schema ไม่มี UNIQUE(pre_t3_id) บน `t3_requests` เลยยื่นซ้ำผ่าน `POST /api/t3` เดิมได้ทันที ไม่ต้องมี resubmit endpoint แยก
+  2. Pre-T3 ใช้งานต่อไม่ได้จริง (ตาม remark ตอน reject T3) → นิสิตลบ Pre-T3 ของตัวเองได้ แล้วเริ่ม flow ใหม่ (Pre-T3 ใหม่ → T3 ใหม่) — **แก้แล้ว**: `PreT3Model.cancel()`/`PreT3Controller.cancel()` เดิมอนุญาตยกเลิกแค่ `Pending`/`Rejected` เพิ่มให้ยกเลิก `Approved` ได้ด้วย แต่ **ห้ามยกเลิกถ้ามี T3 ที่ Approved ผูกอยู่แล้ว** (กัน record สำเร็จสมบูรณ์ถูกลบพลาด — ยืนยันกับคุณแล้วว่าต้องการแบบนี้) เช็คแบบ atomic ในเงื่อนไข UPDATE เดียวกัน กัน race condition + เพิ่ม `PreT3Model.hasApprovedT3()` ให้ controller เช็คก่อนเพื่อ error message ที่ชัดเจน (`T3_ALREADY_APPROVED`)
+     - แถม: เจอบั๊กจาก Section B ("PreT3Controller.cancel() ไม่เช็ค return จาก Model.cancel()") พอดีตอนแก้จุดนี้ เลยแก้ให้ด้วยในตัว
+     - ทดสอบจริงผ่าน Docker ครบ 3 เคส: resubmit T3 ซ้ำ pre_t3_id เดิม, ยกเลิก Approved ที่มี T3 approved ผูกอยู่ (ต้อง block), ยกเลิก Approved ที่ยังไม่มี T3 approved (ต้องผ่าน) — ผ่านหมด
 
 ### A10. ข้อที่ตัดสินใจแล้ว (รอลงมือแก้โค้ด)
 - [x] **`users.department`** — ตัดสินใจ**เก็บไว้** (ยืนยันว่าใช้งานจริง มี description "ภาควิชา/สาขาที่สังกัด" + ตัวอย่าง "สาขาวิทยาการคอมพิวเตอร์" อยู่แล้วในเอกสาร) — อัปเดต comment ใน `db_script/journal_watch_schema_v3.sql` แล้ว ไม่ต้องแก้โค้ดอะไรเพิ่ม
 - [x] **`Program_Chair` role** — ตัดสินใจ**ตัดออก** จากเอกสาร (ตารางที่ 3.4 `users.role` enum) และ `journal_watch_schema_v3.sql` (`users.role` enum ไม่มีอยู่แล้ว) เรียบร้อยแล้ว
-  - [ ] **ยังไม่แก้โค้ดจริง** — `UserModel.js`/`AuthService.js` (หรือไฟล์ที่มี `allowedRoles` ของ `createUser`/`importUsers`) ยังต้องตัด `'Program_Chair'` ออกจาก allowedRoles list ด้วย
-- [ ] **pre-T3 auto-approve co-advisor** — ยืนยัน design แล้ว (ทำ auto-approve ต่อไปตาม logic เดิมใน `PreT3Model.js` ~418-419 ที่ถูกอยู่แล้ว) แต่ต้อง**แก้อีเมลที่ส่งให้ co-advisor**:
-  - Flow: เมื่ออาจารย์ที่ปรึกษาหลัก (Major Advisor) อนุมัติ Pre-T3/T3 → ระบบ auto-approve ให้ co-advisor ทั้ง 2 คน (Co_Advisor_1, Co_Advisor_2 ถ้ามี) ทันที โดย co-advisor **ไม่ต้องกดอนุมัติเอง**
-  - อีเมลที่ส่งให้ co-advisor (ตอนนิสิตยื่นคำร้อง) **ต้องไม่ใช่คำเชิญให้กดอนุมัติ** — เนื้อหาต้องแจ้งว่า "มีนิสิตยื่น Pre-T3/T3 แล้ว ขอให้ไปหารือกับอาจารย์ที่ปรึกษาหลัก (Major Advisor) ซึ่งจะเป็นผู้อนุมัติแทน"
-  - **จุดที่ต้องแก้ในโค้ด**:
-    - `MailService.js` — เพิ่ม event ใหม่ (เช่น `co_advisor_pending`) แยกจาก `advisor_pending` เดิม ที่ส่งให้ major advisor เท่านั้น เพราะเนื้อหาอีเมลต้องต่างกัน (major advisor = คำเชิญอนุมัติ, co-advisor = แจ้งให้ไปหารือ)
-    - `PreT3Controller.submit()` (บรรทัด ~162-171) และ `T3Controller.submit()`/`submitWithFiles()` ที่เกี่ยวข้อง — ปัจจุบันส่งอีเมลแจ้งแค่ major advisor ตอนยื่นคำร้อง (ไม่มีการแจ้ง co-advisor เลย) ต้องเพิ่มส่งอีเมล event ใหม่ให้ co-advisor ทั้ง 2 คนด้วย (ถ้ามี) พร้อมกับตอนที่ส่งให้ major advisor
-    - เช็คว่า `PreT3Controller.resubmit()` (บรรทัด ~444-457) ต้องส่งอีเมลแบบเดียวกันซ้ำตอนยื่นใหม่ด้วยไหม
-- [ ] **pre-T3 Checklist 9 ข้อ — ตัด Auto-check ออก ให้นิสิตติ๊กเองทั้งหมด** — ตัดสินใจแล้ว: ไม่ให้ระบบ auto-tick รายการใดๆ ให้อีก แม้จะมีข้อมูลจากผลค้นหาอยู่แล้วก็ตาม (เดิมมีบางข้อ auto-check ให้ตามเงื่อนไข เช่น ชื่อวารสารตรง, ยังไม่ Discontinued) — นิสิตต้องกดยืนยันเองครบทั้ง 9 ข้อก่อนยื่นคำร้องได้เสมอ
-  - **นี่คือฝั่ง Frontend (Angular)** ไม่ใช่ backend repo นี้ — จุดที่ต้องแก้ (พบตอนอ่านเอกสารธีสิสเดิม ก่อนลบหัวข้ออธิบายออกเพราะยังไม่ได้ข้อสรุป):
-    - Component ฟอร์ม Pre-T3 — ฟังก์ชัน `auto(id, cond)` ที่ auto-tick ตามเงื่อนไข (ข้อ 1, 3, 4, 5, 6, 7, 9 และข้อ 8 แบบมีเงื่อนไข) ต้องตัดออก เหลือใช้ `ms(id)` (manual, ต้องให้นิสิตติ๊กเอง) กับทุกข้อแทน
-    - `ngOnInit()` ที่ทำ Pre-check รายการ Checklist อัตโนมัติตอนมาจากหน้าค้นหา (มี `state.journalName`) — ต้องตัดส่วน pre-check checklist ออก (ส่วนเติมข้อมูลฟอร์มอัตโนมัติอื่นๆ เช่น ชื่อวารสาร/ข้อมูลนิสิต/อาจารย์ที่ปรึกษา ยังคงอัตโนมัติได้เหมือนเดิม ตัดเฉพาะส่วน checklist)
-    - `canSubmit` ยังคงเงื่อนไขเดิม (ต้องผ่านครบทุกข้อ + มี ISSN + รหัสนิสิต) แค่เปลี่ยนที่มาของสถานะแต่ละข้อเป็น manual ทั้งหมด
+  - [x] แก้แล้ว — ตัด `'Program_Chair'` ออกจาก `allowedRoles` ใน `AdminController.createUser()`/`importUsers()` และ `ALL_ROLES` ใน `routes/userRoutes.js`
+- [x] **pre-T3/T3 auto-approve co-advisor** — ถามทีมแล้ว ได้ flow ที่ชัดเจนกว่าที่ร่างไว้เดิม (ของเดิมคิดว่าต้องแจ้ง co-advisor **ตอนยื่นคำร้อง**ให้ไปหารือ — จริงๆ ไม่ต้อง เปลี่ยนเป็นแจ้ง**หลังที่ปรึกษาหลักตัดสินใจแล้ว**แทน):
+  - Flow จริง: ที่ปรึกษาหลัก + co1 + co2 คุยตกลงกันเองนอกระบบ แล้วให้ที่ปรึกษาหลักเป็นคนกดอนุมัติ/ปฏิเสธในระบบ (ระบบ auto-approve co-advisor ให้ทันที — logic เดิมถูกอยู่แล้วไม่ต้องแก้)
+  - อีเมลใหม่ที่ต้องมี: หลังที่ปรึกษาหลักกดอนุมัติ/ปฏิเสธ → ส่งอีเมล**แจ้งเตือนเฉยๆ**ไปหา co1/co2 (ถ้ามี) ว่าที่ปรึกษาหลักตัดสินใจแล้ว ไม่ต้องทำอะไรต่อ — มีไว้เผื่อทั้ง 3 คนคุยตกลงกันเสร็จแล้วแต่ที่ปรึกษาหลักลืมกดในระบบ, co1/co2 จะได้สังเกตว่าไม่มีอีเมลแจ้งเข้ามา แล้วไปทวงถามที่ปรึกษาหลักได้
+  - **แก้แล้ว**:
+    - `MailService.js` — เพิ่ม event `major_advisor_approved`/`major_advisor_rejected` (แยกกันทั้ง Pre-T3 และ T3 content builder) เนื้อหาระบุชัดว่า "แจ้งเตือนเฉยๆ ไม่ต้องดำเนินการ"
+    - `PreT3Controller.advisorReview()`/`T3Controller.advisorReview()` — เช็คว่าคนที่เพิ่งกดคือที่ปรึกษาหลัก (`mySlot === row.advisor_approval`) ถ้าใช่ ส่งอีเมลแจ้งเตือนให้ co1/co2 ทุกคนที่มีอยู่จริง (ดึง email ผ่าน `UserModel.findById` จาก `user_id` ใน approval slot)
+  - ทดสอบจริงผ่าน Docker: จำลอง major advisor กดอนุมัติ Pre-T3 ที่มีทั้ง co1+co2 → ยืนยันว่านิสิตได้ `advisor_approved`, co1/co2 ได้ `major_advisor_approved` ถูกคนถูก event ครบ
+- [x] **pre-T3 Checklist 9 ข้อ — ตัด Auto-check ออก ให้นิสิตติ๊กเองทั้งหมด** — **ปิดงานฝั่ง backend แล้ว ไม่ต่อแก้ในนี้** เป็นงานฝั่ง Frontend (Angular) ล้วนๆ ส่งต่อให้ทีม frontend ไปแก้เอง (จุดที่ต้องแก้: ฟังก์ชัน `auto(id, cond)` ในฟอร์ม Pre-T3 ที่ auto-tick ข้อ 1,3,4,5,6,7,8,9 → เปลี่ยนเป็น `ms(id)` manual ทั้งหมด, `ngOnInit()` ตัดส่วน pre-check checklist ออก, `canSubmit` เปลี่ยนที่มาของสถานะเป็น manual)
 
 ---
 
@@ -107,25 +110,27 @@
 (ข้อที่ตัดออกไป: BugReportController leak err.message, โค้ดซ้ำ cache 4 ไฟล์, `TCIScraper._formatCachedResult` ทิ้ง field, ScopusProxyService in-memory — ทั้งหมดนี้แก้ทางอ้อมจาก Section A แล้ว)
 
 ### 🔴 Critical — Security exploit ได้จริงตอนนี้
-- [ ] **Stored XSS ผ่านไฟล์อัปโหลดที่ปลอม MIME type**
-  - `middlewares/upload.js` — `filename()`: คำนวณ `ext` ไว้แต่ไม่ได้ใช้ ชื่อไฟล์เก็บนามสกุลเดิมเต็ม
-  - `UploadController.downloadFile()` — `res.sendFile()` ไม่บังคับ `Content-Disposition: attachment`
-  - `UnwantedJournalController.getEvidenceFile()`/`evidenceStorage`/`uploadEvidence` — ปัญหาเดียวกัน
-  - ทางแก้: (1) บังคับ `Content-Disposition: attachment` เสมอ (2) บังคับ extension ให้ตรงกับ MIME ที่ผ่าน filter (3) เช็ค magic bytes ด้วย `file-type`
+- [x] **Stored XSS ผ่านไฟล์อัปโหลดที่ปลอม MIME type** — แก้ครบทั้ง 3 ทาง:
+  - ติดตั้ง `file-type@16.5.4` (เวอร์ชัน CJS-compatible ตัวสุดท้าย — v17+ เป็น ESM-only ซึ่งโปรเจกต์นี้ใช้ CommonJS ทั้งหมด) — มี moderate vuln เรื่อง ASF parser (Windows Media) แต่ไม่เกี่ยวกับ use case เรา (จำกัดแค่ PDF/JPG/PNG/WEBP)
+  - `middlewares/upload.js` — เพิ่ม `MIME_TO_EXT` map + แก้ `filename()` ให้ยึดนามสกุลตาม MIME ที่ fileFilter อนุมัติเท่านั้น (ไม่ใช้ของ client อีกต่อไป) + export `verifyFileType()` เช็ค magic bytes จริง (รับได้ทั้ง path/Buffer)
+  - `UploadController.uploadFiles()` — เช็ค magic bytes หลัง multer เขียนไฟล์เสร็จ ไม่ผ่านลบไฟล์ทิ้ง + คืน 400; `downloadFile()` เปลี่ยนจาก `res.sendFile()` เป็น `res.download()` (บังคับ attachment เสมอ)
+  - `UnwantedJournalController` — แก้ `evidenceStorage.filename()` เหมือนกัน, เพิ่ม magic-byte check ใน `createOne`/`updateOne` ทั้งคู่, เปลี่ยน `getEvidenceFile()` เป็น `res.download()`
+  - **เจอเพิ่มระหว่างแก้** (ไม่ได้อยู่ใน 3 จุดที่ระบุไว้แต่ช่องโหว่เดียวกัน): `T3Controller.submitWithFiles()` เขียนไฟล์เองแยกจาก `upload.js` (memory storage + `fs.writeFileSync` ตรงๆ) ก็แก้ extension + เพิ่ม magic-byte check ให้ด้วย
+  - ทดสอบจริงผ่าน Docker: ไฟล์ HTML/SVG ที่มี `<script>` ฝังอยู่ปลอมเป็น PDF/PNG → `verifyFileType()` บล็อกถูกต้องทั้ง buffer-based (memory storage) และ path-based (disk storage), PDF จริงผ่านปกติ
 
 ### ⚠️ Pre-deploy checklist
-- [ ] `/api/v2/logs` เปิดสาธารณะไม่ต้อง login (`routes/logRoutes.js`) — guard ด้วย `NODE_ENV === 'production' → 404`
+- [x] `/api/v3/logs` เปิดสาธารณะไม่ต้อง login (`routes/logRoutes.js`) — เพิ่ม middleware guard `NODE_ENV === 'production' → 404`
 
 ### 🟠 บั๊กกระทบข้อมูล/สิทธิ์
-- [ ] `AuthService.js` — `const createdAt = new Date()` เป็น module-level (บรรทัด ~21) ย้ายเข้าไปในฟังก์ชัน `registerStaff`
-- [ ] `AuthService.registerStaff` — bypass Model layer (query DB ตรงๆ แทนที่จะผ่าน `UserModel`)
-- [ ] `UserController.updateProfile` — แก้ field เกิน scope (UPDATE `prefix`/`first_name`/`last_name` ทั้งที่ comment บอกห้าม) → ตัดออกให้เหลือแค่ `phone`/`facebook_id`/`line_id`
-- [ ] `AdminController.suspendUser` (บรรทัด 210) — `req.user.userId` ผิด (JWT payload ไม่มี field นี้ มีแต่ `.sub`) → self-suspend guard เป็น `false` เสมอ
-- [ ] `PreT3Model.resubmit()` — ไม่เช็ค `affectedRows` ก่อนรัน UPDATE ตัวที่สอง (reset approvals)
-- [ ] `PreT3Controller.cancel()` / `T3Controller.cancel()` — ไม่เช็คค่า return จาก `Model.cancel()`
-- [ ] `JournalController.proxyStatus` — ไม่มี try/catch/next
-- [ ] `MailService._buildPreT3Html()`/`_buildOtpHtml()` — HTML injection จาก user input (`journal_name`, `remark`, ชื่อ user) ไม่ escape ก่อนแทรกเข้า template
-- [ ] `UnwantedJournalController.createOne` — ternary ไม่มีความหมาย (`err.code === 'LIMIT_FILE_SIZE' ? 400 : 400`)
+- [x] `AuthService.js` — ย้าย `createdAt` จาก module-level เข้าไปใน `registerStaff` (ใช้ `new Date()` ตรง return แทน)
+- [x] `AuthService.registerStaff` — เลิก bypass Model layer, เพิ่ม `UserModel.createPendingStaff()` แล้วเรียกผ่าน Model แทน raw `db.query`
+- [x] `UserController.updateProfile` — ตัด `prefix`/`first_name`/`last_name` ออกจาก body/merge/UPDATE เหลือแค่ `phone`/`facebook_id`/`line_id`
+- [x] `AdminController.suspendUser` — แก้ `req.user.userId` → `req.user.sub`
+- [x] `PreT3Model.resubmit()` — เช็ค `affectedRows` ของ UPDATE แรก คืน `false` ถ้าไม่ตรงเงื่อนไข (ไม่รัน UPDATE ที่สองต่อ) + `PreT3Controller.resubmit()` เช็ค return แล้วตอบ 400 ถ้า `false`
+- [x] `T3Controller.cancel()` — เช็ค return จาก `Model.cancel()` (คืน `affectedRows > 0` อยู่แล้ว) ตอบ 400 ถ้า `false`
+- [x] `JournalController.proxyStatus` — เพิ่ม try/catch/next
+- [x] `MailService` — เพิ่ม `_escapeHtml()` escape ก่อนแทรกเข้า `_buildPreT3Html()`/`_buildOtpHtml()` ทุกจุดที่รับ input จากภายนอก
+- [x] `UnwantedJournalController.createOne` — ตัด ternary ไม่มีความหมายออก เหลือ `res.status(400)` ตรงๆ
 
 ### 🟢 Cleanup / Refactor (ไม่กระทบ behavior)
 - [ ] `T3Controller.submit()` กับ `submitWithFiles()` — โค้ดซ้ำ ~100 บรรทัด ควร extract shared validation helper

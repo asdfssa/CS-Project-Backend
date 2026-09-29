@@ -16,4 +16,5 @@ insert_superadmin.sql
 cloudflared/*.json
 uploads/
 test-insert/
+data/
 .claude/scheduled_tasks.lock

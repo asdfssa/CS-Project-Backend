@@ -11,14 +11,12 @@ const bcrypt = require('bcryptjs');
 const UserModel = require('../models/UserModel');
 const OtpModel = require('../models/OtpModel');
 const RefreshTokenModel = require('../models/RefreshTokenModel');
-const SystemLogModel = require('../models/SystemLogModel');
 const MailService = require('./MailService');
 const cryptoUtil = require('../utils/crypto');
 const jwtUtil = require('../utils/jwt');
 const config = require('../config');
 const { OAuth2Client } = require('google-auth-library');
 const googleClient = new OAuth2Client(config.google.clientId);
-const createdAt = new Date();
 class AuthError extends Error {
   constructor(message, code, statusCode = 400) {
     super(message);
@@ -31,7 +29,7 @@ class AuthService {
   /**
    * Step 1: ตรวจ username + password → ออก OTP token + ส่ง OTP
    */
-  static async login({ username, password, ipAddress, userAgent }) {
+  static async login({ username, password }) {
     const user = await UserModel.findByUsername(username);
 
     if (!user) {
@@ -49,45 +47,13 @@ class AuthService {
       throw new AuthError('บัญชีของคุณรอการอนุมัติจากผู้ดูแลระบบ', 'ACCOUNT_PENDING', 403);
     }
 
-    if (UserModel.isLocked(user)) {
-      const minutesLeft = Math.ceil((new Date(user.locked_until) - new Date()) / 60000);
-      throw new AuthError(
-        `บัญชีถูกล็อคชั่วคราว กรุณารออีก ${minutesLeft} นาทีแล้วลองใหม่`,
-        'ACCOUNT_LOCKED',
-        423
-      );
-    }
-
     const passwordOk = await bcrypt.compare(password, user.password_hash);
 
     if (!passwordOk) {
-      await UserModel.incrementFailedAttempts(
-        user.user_id,
-        config.login.maxAttempts,
-        config.login.lockoutMinutes
-      );
-      await SystemLogModel.log({
-        userId: user.user_id,
-        action: 'login_failed',
-        targetType: 'user',
-        targetId: String(user.user_id),
-        detail: { reason: 'wrong_password' },
-        ipAddress,
-        userAgent,
-      });
       throw new AuthError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'INVALID_CREDENTIALS', 401);
     }
 
-    await this._issueOtpForUser(user, ipAddress, userAgent);
-
-    await SystemLogModel.log({
-      userId: user.user_id,
-      action: 'login_password_verified',
-      targetType: 'user',
-      targetId: String(user.user_id),
-      ipAddress,
-      userAgent,
-    });
+    await this._issueOtpForUser(user);
 
     const otpToken = jwtUtil.issueOtpToken(user.user_id);
 
@@ -101,7 +67,7 @@ class AuthService {
   /**
    * Step 2: ตรวจ OTP + ออก access token + refresh token
    */
-  static async verifyOtp({ userId, otpCode, ipAddress, userAgent }) {
+  static async verifyOtp({ userId, otpCode }) {
     const user = await UserModel.findById(userId);
     if (!user) {
       throw new AuthError('ไม่พบบัญชีผู้ใช้ในระบบ', 'USER_NOT_FOUND', 404);
@@ -121,29 +87,11 @@ class AuthService {
 
     if (!isValid) {
       await OtpModel.incrementAttempts(activeOtp.otp_id);
-      await SystemLogModel.log({
-        userId,
-        action: 'otp_failed',
-        targetType: 'otp',
-        targetId: String(activeOtp.otp_id),
-        ipAddress,
-        userAgent,
-      });
       const attemptsLeft = config.otp.maxAttempts - (activeOtp.attempt_count + 1);
       throw new AuthError(`OTP ไม่ถูกต้อง เหลืออีก ${attemptsLeft} ครั้ง`, 'OTP_INVALID', 400);
     }
 
     await OtpModel.markAsUsed(activeOtp.otp_id);
-    await UserModel.resetFailedAttempts(userId, ipAddress);
-
-    await SystemLogModel.log({
-      userId,
-      action: 'login_success',
-      targetType: 'user',
-      targetId: String(userId),
-      ipAddress,
-      userAgent,
-    });
 
     const accessToken = jwtUtil.issueAccessToken(user);
     const { token: refreshToken, hash, expiresAt } = jwtUtil.issueRefreshToken();
@@ -152,8 +100,6 @@ class AuthService {
       userId: user.user_id,
       tokenHash: hash,
       expiresAt,
-      ipAddress,
-      userAgent,
     });
 
     return {
@@ -172,12 +118,12 @@ class AuthService {
   /**
    * ส่ง OTP ใหม่
    */
-  static async resendOtp({ userId, ipAddress, userAgent }) {
+  static async resendOtp({ userId }) {
     const user = await UserModel.findById(userId);
     if (!user) {
       throw new AuthError('ไม่พบบัญชีผู้ใช้ในระบบ', 'USER_NOT_FOUND', 404);
     }
-    await this._issueOtpForUser(user, ipAddress, userAgent);
+    await this._issueOtpForUser(user);
     return {
       maskedEmail: this._maskEmail(user.msu_mail),
       expiresIn: config.otp.expiresMinutes * 60,
@@ -187,7 +133,7 @@ class AuthService {
   /**
    * Google OAuth Login → ออก access token + refresh token
    */
-  static async googleLogin({ idToken, ipAddress, userAgent }) {
+  static async googleLogin({ idToken }) {
     let payload;
     try {
       const ticket = await googleClient.verifyIdToken({
@@ -243,18 +189,6 @@ class AuthService {
       );
     }
 
-    await UserModel.resetFailedAttempts(user.user_id, ipAddress);
-
-    await SystemLogModel.log({
-      userId: user.user_id,
-      action: 'google_login_success',
-      targetType: 'user',
-      targetId: String(user.user_id),
-      detail: { email },
-      ipAddress,
-      userAgent,
-    });
-
     const accessToken = jwtUtil.issueAccessToken(user);
     const { token: refreshToken, hash, expiresAt } = jwtUtil.issueRefreshToken();
 
@@ -262,8 +196,6 @@ class AuthService {
       userId: user.user_id,
       tokenHash: hash,
       expiresAt,
-      ipAddress,
-      userAgent,
     });
 
     return {
@@ -284,7 +216,7 @@ class AuthService {
    * Refresh — ใช้ refresh token ออก access token ใหม่
    * เรียกเมื่อ access token หมดอายุ (401)
    */
-  static async refreshToken({ refreshToken, ipAddress, userAgent }) {
+  static async refreshToken({ refreshToken }) {
     if (!refreshToken) {
       throw new AuthError('ไม่พบ Refresh Token กรุณาเข้าสู่ระบบใหม่', 'NO_REFRESH_TOKEN', 401);
     }
@@ -312,8 +244,6 @@ class AuthService {
       userId: user.user_id,
       tokenHash: newHash,
       expiresAt,
-      ipAddress,
-      userAgent,
     });
 
     return {
@@ -333,7 +263,7 @@ class AuthService {
 
   // ===== Private helpers =====
 
-  static async _issueOtpForUser(user, ipAddress, userAgent) {
+  static async _issueOtpForUser(user) {
     await OtpModel.invalidateActive(user.user_id, 'login_2fa');
 
     const otpCode = cryptoUtil.generateOtp();
@@ -345,8 +275,6 @@ class AuthService {
       otpHash,
       purpose: 'login_2fa',
       expiresAt,
-      ipAddress,
-      userAgent,
     });
 
     MailService.sendOtp(user.msu_mail, otpCode, 'login_2fa');
@@ -364,7 +292,7 @@ class AuthService {
    * Step 1: ขอรีเซ็ตรหัสผ่าน — ส่ง OTP ไปยัง email
    * เฉพาะ Admin / SuperAdmin ที่มี username + password
    */
-  static async requestPasswordReset({ username, ipAddress, userAgent }) {
+  static async requestPasswordReset({ username }) {
     const user = await UserModel.findByUsername(username);
 
     if (!user || !['Admin', 'SuperAdmin'].includes(user.role)) {
@@ -390,20 +318,9 @@ class AuthService {
       otpHash,
       purpose: 'password_reset',
       expiresAt,
-      ipAddress,
-      userAgent,
     });
 
     MailService.sendOtp(user.msu_mail, otpCode, 'password_reset');
-
-    await SystemLogModel.log({
-      userId: user.user_id,
-      action: 'password_reset_requested',
-      targetType: 'user',
-      targetId: String(user.user_id),
-      ipAddress,
-      userAgent,
-    });
 
     const resetOtpToken = jwtUtil.issuePasswordResetOtpToken(user.user_id);
 
@@ -417,7 +334,7 @@ class AuthService {
   /**
    * Step 2: ยืนยัน OTP + ตั้งรหัสผ่านใหม่
    */
-  static async resetPassword({ userId, otpCode, newPassword, ipAddress, userAgent }) {
+  static async resetPassword({ userId, otpCode, newPassword }) {
     const user = await UserModel.findById(userId);
     if (!user) {
       throw new AuthError('ไม่พบบัญชีผู้ใช้ในระบบ', 'USER_NOT_FOUND', 404);
@@ -441,14 +358,6 @@ class AuthService {
 
     if (!isValid) {
       await OtpModel.incrementAttempts(activeOtp.otp_id);
-      await SystemLogModel.log({
-        userId,
-        action: 'password_reset_otp_failed',
-        targetType: 'otp',
-        targetId: String(activeOtp.otp_id),
-        ipAddress,
-        userAgent,
-      });
       const attemptsLeft = config.otp.maxAttempts - (activeOtp.attempt_count + 1);
       throw new AuthError(`OTP ไม่ถูกต้อง เหลืออีก ${attemptsLeft} ครั้ง`, 'OTP_INVALID', 400);
     }
@@ -460,22 +369,13 @@ class AuthService {
 
     // บังคับ logout ทุก session
     await RefreshTokenModel.revokeAllByUserId(userId);
-
-    await SystemLogModel.log({
-      userId,
-      action: 'password_reset_success',
-      targetType: 'user',
-      targetId: String(userId),
-      ipAddress,
-      userAgent,
-    });
   }
 
   /**
    * POST /api/auth/register-staff
    * Staff สมัครด้วย Google OAuth — เช็ค email pattern ก่อน
    */
-  static async registerStaff({ idToken, ipAddress, userAgent }) {
+  static async registerStaff({ idToken }) {
     // Verify Google token
     let payload;
     try {
@@ -536,37 +436,17 @@ class AuthService {
     }
 
     // สร้าง account ใหม่ role=Staff, status=Pending
-    const db = require('../config/database');
-    await db.query(
-      `INSERT INTO users
-         (msu_mail, oauth_provider_id,
-          role, first_name, last_name, account_status)
-       VALUES (?, ?, 'Staff', ?, ?, 'Pending')`,
-      [
-        email,
-        payload.sub,
-        payload.given_name || localPart,
-        payload.family_name || '',
-      ]
-    );
+    const firstName = payload.given_name || localPart;
+    const lastName = payload.family_name || '';
+    await UserModel.createPendingStaff({ msuMail: email, firstName, lastName });
 
-await SystemLogModel.log({
-  userId: null,
-  action: 'staff_register',
-  targetType: 'user',
-  targetId: email,
-  detail: { email },
-  ipAddress,
-  userAgent,
-});
-
-return {
-  email,
-  firstName: payload.given_name || localPart,
-  lastName: payload.family_name || '',
-  role: 'Staff',
-  createdAt: createdAt.toISOString(),
-};
+    return {
+      email,
+      firstName,
+      lastName,
+      role: 'Staff',
+      createdAt: new Date().toISOString(),
+    };
   }
 }
 

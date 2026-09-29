@@ -52,8 +52,7 @@
 --              back into the system, so its "approver" is an email, not a user_id.
 --
 -- Everything else (users, advisor_assignments,
--- msu_unwanted_journals, otp_requests, system_logs, email_notifications,
--- bug_reports) is conceptually the same as the current schema — those tables
+-- msu_unwanted_journals, otp_requests) is conceptually the same as the current schema — those tables
 -- were never the source of complexity, so they are carried over with only
 -- light cleanup.
 -- ================================================================================
@@ -67,9 +66,6 @@ CREATE DATABASE IF NOT EXISTS journal_watch_v2
 
 USE journal_watch_v2;
 
-DROP TABLE IF EXISTS bug_reports;
-DROP TABLE IF EXISTS system_logs;
-DROP TABLE IF EXISTS email_notifications;
 DROP TABLE IF EXISTS otp_requests;
 DROP TABLE IF EXISTS auth_tokens;
 DROP TABLE IF EXISTS t3_evidence_files;
@@ -95,14 +91,12 @@ CREATE TABLE users (
     password_hash       VARCHAR(255)    NULL COMMENT 'bcrypt, NULL for OAuth users',
 
     msu_mail            VARCHAR(100)    NOT NULL COMMENT 'OAuth match key + contact email',
-    oauth_provider_id   VARCHAR(255)    NULL COMMENT 'stable Google subject id',
 
     role                ENUM('Student','Supervisor','Program_Chair','Staff','Admin','SuperAdmin')
                                         NOT NULL COMMENT 'Program_Chair signs Pre-T3 approvals per the paper form',
     prefix              VARCHAR(50)     NULL,
     first_name          VARCHAR(100)    NOT NULL,
     last_name           VARCHAR(100)    NOT NULL,
-    faculty             VARCHAR(150)    NULL,
     department          VARCHAR(150)    NULL,
 
     -- Student-only academic info. Kept nullable on the shared table rather than
@@ -123,37 +117,27 @@ CREATE TABLE users (
 
     account_status      ENUM('Pending','Active','Suspended') NOT NULL DEFAULT 'Pending',
 
-    failed_login_attempts INT           NOT NULL DEFAULT 0,
-    locked_until          TIMESTAMP     NULL,
-    last_login_at         TIMESTAMP     NULL,
-    last_login_ip         VARCHAR(45)   NULL,
-
-    deleted_at          TIMESTAMP       NULL,
     created_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                                 ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (user_id),
     UNIQUE KEY uq_users_username      (username),
     UNIQUE KEY uq_users_msu_mail      (msu_mail),
-    UNIQUE KEY uq_users_oauth_sub     (oauth_provider_id),
     INDEX      idx_users_role         (role),
     INDEX      idx_users_status       (account_status),
-    INDEX      idx_users_deleted_at   (deleted_at),
 
     CONSTRAINT chk_login_method CHECK (
         (role IN ('Admin','SuperAdmin')
             AND username IS NOT NULL AND password_hash IS NOT NULL)
         OR
         (role NOT IN ('Admin','SuperAdmin')
-            AND username IS NULL AND password_hash IS NULL
-            AND oauth_provider_id IS NOT NULL)
+            AND username IS NULL AND password_hash IS NULL)
     )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Note: dropped the separate `oauth_provider` column — the project only ever
--- uses Google, so a bare oauth_provider_id (globally unique already) carries
--- the same guarantee without an extra column + composite unique key to maintain.
+-- Note (A6): dropped `oauth_provider_id` — it was written on create but never
+-- actually read back to verify a Google sub match; login only ever matched on
+-- `msu_mail`, so the column carried no real guarantee. `faculty` dropped too
+-- (dead field, `department` is the one actually used/kept — see A10 decision).
 
 
 -- ================================================================================
@@ -165,7 +149,6 @@ CREATE TABLE advisor_assignments (
     advisor_id     INT       NOT NULL,
     advisor_type   ENUM('Major','Co_1','Co_2') NOT NULL,
     is_active      BOOLEAN   NOT NULL DEFAULT TRUE,
-    assigned_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (assignment_id),
     UNIQUE KEY uq_advisor_assignment (student_id, advisor_id, advisor_type),
@@ -191,20 +174,13 @@ CREATE TABLE msu_unwanted_journals (
     evidence_file_path  VARCHAR(255) NULL,
     recorded_date       DATE         NOT NULL,
     created_by          INT          NOT NULL,
-    deleted_at          TIMESTAMP    NULL,
-    deleted_by          INT          NULL,
     created_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                               ON UPDATE CURRENT_TIMESTAMP,
 
     PRIMARY KEY (unwanted_id),
     INDEX idx_muj_issn         (issn),
     INDEX idx_muj_journal_name (journal_name),
-    INDEX idx_muj_deleted_at   (deleted_at),
 
     CONSTRAINT fk_muj_created_by FOREIGN KEY (created_by) REFERENCES users (user_id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_muj_deleted_by FOREIGN KEY (deleted_by) REFERENCES users (user_id)
         ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -232,11 +208,6 @@ CREATE TABLE pre_t3_requests (
     quartile_or_tier    VARCHAR(10)  NULL,
     is_discontinued     BOOLEAN      NOT NULL DEFAULT FALSE,
     is_hijacked         BOOLEAN      NOT NULL DEFAULT FALSE,
-
-    -- Student snapshot (copied at submit time)
-    degree_level        ENUM('Master','Doctoral') NOT NULL,
-    curriculum_year      ENUM('2560','2566')       NOT NULL,
-    study_plan_code      VARCHAR(20)                NOT NULL,
 
     -- Article info
     article_title_en    VARCHAR(500) NULL,
@@ -286,13 +257,6 @@ CREATE TABLE t3_requests (
     pre_t3_id               INT          NOT NULL COMMENT 'must reference an Approved pre_t3_requests row',
     student_id              INT          NOT NULL,
 
-    issn                    VARCHAR(20)  NOT NULL,
-    journal_name            VARCHAR(255) NOT NULL,
-
-    degree_level            ENUM('Master','Doctoral') NOT NULL,
-    curriculum_year         ENUM('2560','2566')       NOT NULL,
-    study_plan_code         VARCHAR(20)                NOT NULL,
-
     -- Paper & research details
     title_thai              VARCHAR(500) NOT NULL,
     title_english           VARCHAR(500) NOT NULL,
@@ -326,16 +290,6 @@ CREATE TABLE t3_requests (
 
     overall_status               ENUM('Pending','Approved','Rejected','Cancelled')
                                               NOT NULL DEFAULT 'Pending',
-    submission_date               DATE         NULL,
-    submission_round_cutoff       VARCHAR(10)  NULL COMMENT 'e.g. 2568-04 = April 2025 cutoff round',
-
-    -- Final decision, relayed by Staff from Graduate School's email reply
-    -- (researchpublication@msu.ac.th) — Graduate School has no login, so this
-    -- is a plain status + who-relayed-it field, not a `request_approvals` row.
-    grad_school_status       ENUM('Pending','Approved','Rejected') NOT NULL DEFAULT 'Pending',
-    grad_school_remark        VARCHAR(500) NULL,
-    grad_school_decided_at     TIMESTAMP    NULL,
-    grad_school_relayed_by     INT          NULL COMMENT 'Staff user_id who entered the emailed result',
 
     created_at                  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at                  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -344,16 +298,12 @@ CREATE TABLE t3_requests (
     PRIMARY KEY (t3_id),
     INDEX idx_t3_student           (student_id),
     INDEX idx_t3_pre_t3            (pre_t3_id),
-    INDEX idx_t3_issn              (issn),
     INDEX idx_t3_status            (overall_status),
-    INDEX idx_t3_submission_date   (submission_date),
 
     CONSTRAINT fk_t3_pre_t3  FOREIGN KEY (pre_t3_id)   REFERENCES pre_t3_requests (pre_t3_id)
         ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_t3_student FOREIGN KEY (student_id)  REFERENCES users (user_id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_t3_relayed_by FOREIGN KEY (grad_school_relayed_by) REFERENCES users (user_id)
-        ON UPDATE CASCADE ON DELETE SET NULL
+        ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -376,7 +326,7 @@ CREATE TABLE request_approvals (
     request_type    ENUM('Pre_T3','T3')                NOT NULL,
     request_id      INT                                 NOT NULL COMMENT 'pre_t3_id or t3_id depending on request_type',
     step            ENUM('Advisor','Co_Advisor_1','Co_Advisor_2',
-                          'Program_Chair','Faculty_Committee')
+                          'Faculty_Committee')
                                                          NOT NULL,
     approver_id     INT       NULL COMMENT 'user_id of the advisor/staff who decides this step',
     status          ENUM('Pending','Approved','Rejected') NOT NULL DEFAULT 'Pending',
@@ -384,7 +334,6 @@ CREATE TABLE request_approvals (
     meeting_no      VARCHAR(50)  NULL COMMENT 'used by Faculty_Committee step only',
     meeting_date    DATE         NULL COMMENT 'used by Faculty_Committee step only',
     decided_at      TIMESTAMP    NULL,
-    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (approval_id),
     UNIQUE KEY uq_request_step        (request_type, request_id, step),
@@ -395,8 +344,8 @@ CREATE TABLE request_approvals (
         ON UPDATE CASCADE ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Note: request_id has no FK (it is polymorphic across pre_t3_requests/t3_requests,
--- same tradeoff email_notifications already accepts) — enforced at the app layer.
+-- Note: request_id has no FK (it is polymorphic across pre_t3_requests/t3_requests)
+-- — enforced at the app layer.
 
 
 -- ================================================================================
@@ -412,7 +361,6 @@ CREATE TABLE t3_evidence_files (
                       'Table_Of_Contents','Database_Evidence','Peer_Review_Result')
                         NOT NULL,
     file_path   VARCHAR(255) NOT NULL,
-    uploaded_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (file_id),
     UNIQUE KEY uq_t3_file_type (t3_id, file_type),
@@ -423,55 +371,7 @@ CREATE TABLE t3_evidence_files (
 
 
 -- ================================================================================
--- 8. email_notifications
--- ================================================================================
-CREATE TABLE email_notifications (
-    notif_id      INT                 NOT NULL AUTO_INCREMENT,
-    user_id       INT                 NOT NULL,
-    request_type  ENUM('Pre_T3','T3') NOT NULL,
-    request_id    INT                 NOT NULL COMMENT 'polymorphic, see request_approvals note',
-    event         VARCHAR(100)        NOT NULL,
-    is_success    BOOLEAN             NOT NULL,
-    error_message TEXT                NULL,
-    sent_at       TIMESTAMP           NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (notif_id),
-    INDEX idx_en_user    (user_id),
-    INDEX idx_en_request (request_type, request_id),
-    INDEX idx_en_sent_at (sent_at),
-
-    CONSTRAINT fk_en_user FOREIGN KEY (user_id) REFERENCES users (user_id)
-        ON UPDATE CASCADE ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-
--- ================================================================================
--- 9. system_logs
--- ================================================================================
-CREATE TABLE system_logs (
-    log_id      INT          NOT NULL AUTO_INCREMENT,
-    user_id     INT          NULL COMMENT 'NULL = system action',
-    action      VARCHAR(255) NOT NULL,
-    target_type VARCHAR(50)  NULL,
-    target_id   VARCHAR(50)  NULL,
-    detail      JSON         NULL COMMENT 'free-form debug context, genuinely variable — JSON is appropriate',
-    ip_address  VARCHAR(45)  NOT NULL,
-    user_agent  VARCHAR(500) NULL,
-    created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (log_id),
-    INDEX idx_sl_user    (user_id),
-    INDEX idx_sl_created (created_at),
-    INDEX idx_sl_action  (action),
-    INDEX idx_sl_target  (target_type, target_id),
-
-    CONSTRAINT fk_sl_user FOREIGN KEY (user_id) REFERENCES users (user_id)
-        ON UPDATE CASCADE ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-
--- ================================================================================
--- 10. otp_requests
+-- 8. otp_requests
 -- ================================================================================
 CREATE TABLE otp_requests (
     otp_id         INT          NOT NULL AUTO_INCREMENT,
@@ -481,8 +381,6 @@ CREATE TABLE otp_requests (
     expires_at     TIMESTAMP    NOT NULL,
     used_at        TIMESTAMP    NULL,
     attempt_count  INT          NOT NULL DEFAULT 0,
-    ip_address     VARCHAR(45)  NULL,
-    user_agent     VARCHAR(500) NULL,
     created_at     TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (otp_id),
@@ -495,7 +393,7 @@ CREATE TABLE otp_requests (
 
 
 -- ================================================================================
--- 11. auth_tokens  (merges refresh_tokens + password_reset_tokens)
+-- 9. auth_tokens  (merges refresh_tokens + password_reset_tokens)
 -- ================================================================================
 -- Both tables were: user_id, token_hash, expires_at, one "consumed" timestamp,
 -- ip/user-agent, created_at. Same shape, different lifetimes/purpose — modeled
@@ -509,9 +407,6 @@ CREATE TABLE auth_tokens (
     token_hash   VARCHAR(255) NOT NULL,
     expires_at   TIMESTAMP    NOT NULL,
     consumed_at  TIMESTAMP    NULL COMMENT 'used_at (password reset) or revoked_at (refresh); NULL = still valid',
-    ip_address   VARCHAR(45)  NULL,
-    user_agent   VARCHAR(500) NULL,
-    created_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (token_id),
     UNIQUE KEY uq_at_token_hash (token_hash),
@@ -523,53 +418,20 @@ CREATE TABLE auth_tokens (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
--- ================================================================================
--- 12. bug_reports
--- ================================================================================
--- Given a real DDL here (the current schema has this table live in production
--- with no CREATE TABLE anywhere in source control — that gap should not be
--- carried into a redesign).
--- ================================================================================
-CREATE TABLE bug_reports (
-    report_id       INT          NOT NULL AUTO_INCREMENT,
-    reported_by     INT          NOT NULL,
-    category        ENUM('scraper','form','auth','notification','other') NOT NULL,
-    title           VARCHAR(200) NOT NULL,
-    description     TEXT         NOT NULL,
-    page_url        VARCHAR(500) NULL,
-    screenshot_path VARCHAR(255) NULL,
-    status          ENUM('open','in_progress','resolved','wontfix') NOT NULL DEFAULT 'open',
-    resolved_by     INT          NULL,
-    resolved_note   TEXT         NULL,
-    resolved_at     TIMESTAMP    NULL,
-    created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
-                                           ON UPDATE CURRENT_TIMESTAMP,
-
-    PRIMARY KEY (report_id),
-    INDEX idx_br_status   (status),
-    INDEX idx_br_reporter (reported_by),
-
-    CONSTRAINT fk_br_reporter FOREIGN KEY (reported_by) REFERENCES users (user_id)
-        ON UPDATE CASCADE ON DELETE RESTRICT,
-    CONSTRAINT fk_br_resolver FOREIGN KEY (resolved_by) REFERENCES users (user_id)
-        ON UPDATE CASCADE ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ================================================================================
--- SCORECARD vs. current production schema (12 tables -> 13 tables, but 2 merged
--- into 1 elsewhere, so net +0 tables; the real change is inside the tables)
+-- SCORECARD vs. current production schema
 -- --------------------------------------------------------------------------------
 -- Removed entirely : JSON-based approval columns (5x), the 'N/A' status value,
 --                     STORED generated columns + their indexes (11x, migrations
 --                     001/002), issn_virtual VIRTUAL column, oauth_provider column,
---                     duplicate refresh_tokens/password_reset_tokens tables.
+--                     duplicate refresh_tokens/password_reset_tokens tables,
+--                     journals_cache (A1), bug_reports/system_logs/email_notifications
+--                     (A3 — out of proposal scope).
 -- Added             : request_approvals (normalized approvals, 1 table replaces
 --                     the JSON+generated-column approach across 2 tables),
---                     t3_evidence_files (1 table replaces 1 JSON object),
---                     a real bug_reports DDL (was missing entirely before).
+--                     t3_evidence_files (1 table replaces 1 JSON object).
 -- Net effect        : approval status for any step, on any request, by any
 --                     approver is a single indexed lookup — no JSON_EXTRACT,
 --                     no generated column, no migration needed to add a new
