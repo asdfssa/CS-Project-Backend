@@ -151,6 +151,40 @@
 
 ---
 
+## Section C — บั๊กที่เจอจากการไล่หารอบสุดท้าย (ยังไม่แก้ — รวบรวมไว้ก่อน)
+
+ไล่หาบั๊กแบบ full read-through ทั้ง `src/controllers/`, `src/models/`, `src/services/`, `src/middlewares/` + `src/routes/` + `src/utils/` + `src/config/` (4 รอบแยกกัน) เจอทั้งหมด 20 ข้อ เรียงตามความรุนแรง — **ยังไม่ได้แก้ข้อไหนเลย** รอสั่งก่อนเริ่ม
+
+### 🔴 Critical — Account takeover / Security exploit ได้จริง
+- [ ] `AdminController.updateUser` (`PATCH /api/manage/users/:id`) — ไม่เช็ค role ของ target เลย ทั้งที่ route นี้ Staff เข้าถึงได้ด้วย (`userManageRoutes.js` อนุญาต Admin/SuperAdmin/Staff) → Staff แก้ `msu_mail` ของ Admin/SuperAdmin ได้ แล้วใช้ `POST /api/auth/forgot-password` ยึด account Admin ต่อได้เลย (OTP ส่งไปอีเมลที่เพิ่งเปลี่ยน)
+- [ ] `AdminController.activateUser` — ไม่เช็ค role ของ target เหมือน `suspendUser` (ที่ block `['Admin','SuperAdmin']` อยู่แล้ว) → Staff เรียก `PATCH /api/manage/users/:id/activate` reactivate Admin ที่ถูก suspend ไปได้ ข้าม guard ของ `activateAdmin` ที่ตั้งใจจำกัดไว้
+- [ ] `src/routes/logRoutes.js` — ไม่มี auth middleware เลย มีแค่ guard `NODE_ENV === 'production' → 404` ที่เพิ่งแก้ไป (ดู Section B) แต่ถ้า `NODE_ENV` ไม่ใช่ `production` เป๊ะๆ (unset/staging/พิมพ์ผิด) ใครก็เรียก `GET /api/v3/logs` อ่าน OTP ที่ log ผ่าน `logger.otp()` (ตอน `MAIL_MODE=console`) ได้ทันที ข้าม 2FA ทั้งระบบ
+- [ ] `src/middlewares/upload.js` — `storage.destination` ใช้ `req.params.id` ตรงๆ ใน `path.join()` ไม่มีการเช็คว่าเป็นตัวเลข (route `:id` ไม่มี regex constraint) → path traversal ผ่าน URL-encoded `../` ใน param ได้ (Express decode param หลัง match route) เขียนไฟล์นอก `uploads/` ได้
+- [ ] `src/services/AuthService.js` (googleLogin บรรทัด ~157, registerStaff บรรทัด ~399) — เช็ค domain เป็น `domain !== config.google.allowedDomain && domain !== 'gmail.com'` แปลว่าอีเมล gmail.com ธรรมดาผ่านเงื่อนไขได้เสมอ ทั้งที่ error message บอกว่าอนุญาตเฉพาะ `@msu.ac.th` — ถ้าไม่ได้ตั้งใจไว้เป็น backdoor ทดสอบ ต้องตัดออก
+
+### 🟠 บั๊กกระทบข้อมูล/สิทธิ์
+- [ ] `PreT3Model.create()` / `T3Model.create()` — INSERT หลัก + insert `request_approvals` แต่ละแถว เป็นคนละ `db.query()` แยกกัน ไม่ได้ wrap ด้วย `withTransaction()` เหมือนฟังก์ชันอื่นในไฟล์เดียวกัน → ถ้า insert approval row กลางทางพัง (เช่น advisor id หลุด) จะเหลือ request ที่ไม่มีแถว approval เลย มองไม่เห็นจากทุกฝั่ง reviewer ถาวร
+- [ ] `PreT3Model.cancel()` / `T3Model.cancel()` — เปลี่ยนแค่ `overall_status` ไม่ cascade ไปที่แถว `request_approvals` ที่ยัง `Pending`; ส่วน `advisorReview()`/`facultyReview()` ก็ไม่เช็ค `overall_status` ก่อนเขียนทับ → ถ้านิสิตกด cancel ขณะ advisor/staff มีแท็บ pending ค้างอยู่ แล้วกด approve/reject ทีหลัง จะเขียนทับ `Cancelled` กลับเป็น `Rejected`/`Approved` ได้เงียบๆ (เกิดกับทั้ง Pre-T3 และ T3)
+- [ ] `AdminController.createUser` (single-user, บรรทัด ~318) — insert `users` + insert `advisor_assignments` เป็นคนละ query แยกกัน ไม่ transaction เหมือน `importUsers` (ที่แก้เป็น all-or-nothing ไปแล้วใน Section B) → advisor insert พังกลางทางจะเหลือ user ที่สร้างไปแล้วแต่ไม่มี advisor และ retry ซ้ำจะเจอ "MSU Mail มีอยู่ในระบบแล้ว"
+- [ ] `AdminController.importUsers` (CSV, บรรทัด ~554-574) — insert advisor `Co_1` ถูก nest อยู่ใน `if (row.advisor_major_mail)` ทั้งที่ validate แยกอิสระ → row ที่มี `advisor_co1_mail` แต่ไม่มี `advisor_major_mail` จะผ่าน validation แต่ไม่ได้ insert advisor assignment ใดๆ เลย เงียบๆ
+- [ ] `UnwantedJournalController.updateOne` — ไม่เช็ค ISSN ซ้ำตอนแก้ `issn` ทั้งที่ `createOne`/`importCsv` เช็ค (schema เป็นแค่ INDEX ไม่ใช่ UNIQUE เลย DB ก็ไม่กันให้) → แก้ ISSN ให้ซ้ำกับ record อื่นได้ ทำให้ `checkByIssn` (LIMIT 1) ไม่ชัดเจนว่าอ้างถึง record ไหน
+- [ ] `UnwantedJournalController.updateOne` — ลบไฟล์ evidence เก่าออกจาก disk (`fs.unlinkSync`) **ก่อน** UPDATE DB สำเร็จ ถ้า UPDATE query พังทีหลัง จะเหลือ DB row ชี้ไปที่ไฟล์ที่ไม่มีอยู่จริงแล้ว (catch block ลบแค่ไฟล์ใหม่ที่เพิ่งอัปโหลด ไม่ได้กู้ไฟล์เก่าคืน)
+
+### 🟡 ความน่าเชื่อถือของ Scopus integration
+- [ ] `ScopusProxyService._persist()` — เชื่อม promise chain ต่อกันด้วย `this._writeQueue = this._writeQueue.then(() => this._writeAtomic(...))` ไม่มี `.catch` เลย → ถ้า `_writeAtomic` fail แม้แค่ครั้งเดียว (เช่น `fs.rename` ชน EPERM/EBUSY ชั่วคราว) queue จะค้าง rejected ตลอดไป ทุก call ถัดไปที่ `await this._persist()` (เช่นใน `incrementUsage()`) จะ throw ตลอด ทำให้ Scopus integration ทั้งระบบพังจนกว่าจะ restart process
+- [ ] `ScopusProxyService` per-second throttle — `_isThrottled()` เช็คจาก `recentRequestTimestamps` แต่ timestamp ถูกบันทึกใน `incrementUsage()` ซึ่งเรียก**หลัง** `axios.get` resolve แล้ว (ไม่ใช่ตอนเริ่มยิง) → ยิง request พร้อมกันหลายตัว (เช่น `Promise.all` sync วารสารหลายรายการ) จะผ่าน throttle check พร้อมกันหมดก่อนที่ตัวไหนจะ resolve เลย เกิด burst เกิน `PER_SECOND_LIMIT` จริงตามที่ระบบตั้งใจจะกัน
+- [ ] `ScopusService` — เจอ 429 ล็อค key เป็นเวลาคงที่ 1 ชม. เสมอ ไม่แยกว่าเป็น burst throttle ปกติหรือ weekly quota หมดจริง (ไม่อ่าน `err.response.headers` ตอน error เลย) → key ที่ quota หมดทั้งสัปดาห์จะถูกปลดล็อคหลัง 1 ชม. แล้วโดน 429 ซ้ำวนไปเรื่อยๆ แทนที่จะพักยาวจนถึง reset จริง
+
+### 🟢 ควรพิจารณา (severity ต่ำ)
+- [ ] `AuthService._issueOtpForUser()` / `requestPasswordReset()` — เรียก `MailService.sendOtp()` แบบไม่ await ไม่เช็ค `{success,error}` ที่ return กลับมา → ถ้า SMTP พัง client จะได้ response ว่า "ส่ง OTP แล้ว" ทั้งที่ไม่มีอีเมลไปถึงจริง
+- [ ] `_approvalHelpers.reviewAdvisorSlot()` / `PreT3Model.facultyReview()` / `T3Model.facultyReview()` — เช็ค action ด้วย `action === 'approve' ? 'Approved' : 'Rejected'` ไม่ validate ค่า `action` เลย → ค่าที่ไม่คาดคิด (`undefined`/พิมพ์ผิด) จะถูกตีความเป็น "ปฏิเสธ" เงียบๆ แทนที่จะ error
+- [ ] `src/middlewares/rateLimit.js` — `skipLocalhost` เช็ค `ip.startsWith('172.')` ซึ่งครอบคลุม `172.0.0.0/8` ทั้งช่วง ทั้งที่ Docker bridge จริงคือ `172.16.0.0/12` เท่านั้น → ตอน dev mode ผู้ใช้จริงที่ IP สาธารณะขึ้นต้นด้วย 172 (มีเยอะ เช่น Cloudflare, Google) จะโดน skip rate limit ไปด้วย
+- [ ] `src/middlewares/rateLimit.js` + `app.js` (`trust proxy: 1`) — `skipLocalhost` เชื่อ `req.ip` ซึ่งมาจาก header `X-Forwarded-For` ที่ client กำหนดเองได้ ถ้า server ไม่ได้อยู่หลัง reverse proxy จริง (ปกติตอน dev/staging) → ส่ง header ปลอมเป็น `127.0.0.1` ได้ บายพาส rate limit ทุกตัวจากเครื่องไหนก็ได้
+- [ ] `src/routes/authRoutes.js` — `POST /auth/refresh` ไม่มี rate limiter เลย ทั้งที่ endpoint auth อื่นๆ ทุกตัวมี (`login`/`verify-otp`/`resend-otp`/`reset-password`/`google`/`register-staff`/`forgot-password`)
+- [ ] `ScopusProxyService` weekly-quota lazy reset (บรรทัด ~63-71) — reset `weeklyRemaining` ใน memory ตรงๆ ไม่เรียก `_persist()` ทันที (self-heal ได้เองรอบถัดไป แต่ไม่ตรงกับ "write-through" ที่ comment หัวไฟล์บอกไว้ severity ต่ำสุดในกลุ่มนี้)
+
+---
+
 ## หมายเหตุ
 - `scopus_h_index: null` ใน `ScopusService.js`/`ScopusScraper.js` **ไม่ใช่บั๊ก** — ยืนยันแล้วว่า Scopus ไม่มีข้อมูลนี้ให้จริง ตั้งใจ hardcode ไว้
 - ไฟล์นี้แทนที่ `TO_FIX.md` เดิม (ลบไปแล้ว) — รวมทุกอย่างไว้ที่นี่ที่เดียว
