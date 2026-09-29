@@ -45,8 +45,9 @@ class TCIService {
         return print === normalizedIssn || online === normalizedIssn;
       });
 
-      const journal = exact || journals[0];
-      return TCIService._parseApiResponse(journal, issn);
+      // ไม่เจอ exact match → ถือว่าไม่พบวารสารนี้ ดีกว่าเดาวารสารอื่นที่ผลค้นหาใกล้เคียงมา
+      if (!exact) return null;
+      return TCIService._parseApiResponse(exact, issn);
 
     } catch (err) {
       throw new Error(`TCI API error: ${err.message}`);

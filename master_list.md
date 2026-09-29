@@ -141,13 +141,13 @@
 - [x] `errorResponse.js` — `serverError()` เพิ่ม special-case สำหรับ error ที่พก `statusCode`+`code` มาเอง (เช่น `AuthError`) ให้ behavior ตรงกับ `errorHandler.js`
 
 ### 🔵 ควรพิจารณา (ไม่ใช่บั๊ก แต่ควรตระหนัก)
-- [ ] `TCIService`/`TCIScraper` — fallback `journals[0]` เมื่อไม่เจอ exact ISSN match อาจได้ข้อมูลวารสารผิดตัว
-- [ ] `T3Controller.submitWithFiles` — sync `fs.writeFileSync` บล็อก event loop + ไม่มี rollback/duplicate-guard
-- [ ] `T3Controller.normalizePublicationType` — default เป็น `National_TCI_Tier2` แบบเงียบๆ ถ้า parse ไม่ได้ (กระทบเครดิตนิสิตโดยตรง)
-- [ ] `rateLimit.js` — rate limit ทั้งหมดขึ้นกับ `NODE_ENV === 'production'` เป๊ะๆ ตั้งผิดจะปิด brute-force protection แบบเงียบๆ
-- [ ] Scraping endpoint (`/journal/*/scrape`) ไม่มี rate limiter ป้องกันยิงรัว (เปิด browser จริงทุกครั้ง)
-- [ ] `MailService.transporter` เป็น `null` เงียบๆ ถ้า config mode ตั้งผิด — ควร validate ตอน startup
-- [ ] noVNC ไม่มีรหัสผ่าน (`x11vnc -nopw`) + publish port ออกสู่ host (`docker-compose.yml`) — เช็ค firewall/router ว่า port 5900/5901/6080/6081 ไม่เปิดออกอินเทอร์เน็ตจริง
+- [x] `TCIService`/`TCIScraper` — เลิก fallback เป็น `journals[0]`/`apiResult[0]` แล้ว ไม่เจอ exact ISSN match ให้ถือว่าไม่พบวารสาร (คืน `null` → caller ตอบ 404 อยู่แล้ว) ดีกว่าเดาวารสารอื่นที่ผลค้นหาใกล้เคียง
+- [x] `T3Controller.submitWithFiles` — เปลี่ยนเป็น `fs/promises` (ไม่บล็อก event loop) + แยกเป็น 2 loop: เช็ค magic bytes ของทุกไฟล์ก่อน แล้วค่อยเขียนไฟล์ทั้งหมด (fail ก่อนเขียนไฟล์ไหนเลย เลยไม่ต้อง rollback)
+- [x] `T3Controller.normalizePublicationType` — ยัง default เป็น `National_TCI_Tier2` เหมือนเดิม (ตัดสินใจ business logic ไม่ใช่หน้าที่โค้ด) แต่เพิ่ม `console.warn` ตอน parse tier ไม่ได้ ให้เห็นชัดแทนที่จะเงียบ
+- [x] `rateLimit.js` — เพิ่ม startup warning ถ้า `NODE_ENV` ถูกตั้งเป็นค่าที่ไม่ใช่ `production`/`development` (พิมพ์ผิด) กันหลุด dev-mode fallback แบบไม่รู้ตัว
+- [x] Scraping endpoint (`/journal/*/scrape`) — เพิ่ม `scrapeLimiter` (10 ครั้ง/5 นาที/IP) ใน `rateLimit.js` + wire เข้า `journalRoutes.js`
+- [x] `MailService` — เปลี่ยนจาก `transporter = null` เงียบๆ เป็น throw ตอน startup ถ้า `MAIL_MODE` ไม่ใช่ `console`/`smtp`
+- [x] noVNC — bind port 5900/6080 เป็น `127.0.0.1:...` ใน `docker-compose.yml` แทน publish ออกทุก interface (ต้อง SSH tunnel ถ้าจะดูจากเครื่องอื่น)
 
 ---
 

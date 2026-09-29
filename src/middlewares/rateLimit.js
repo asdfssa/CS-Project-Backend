@@ -7,6 +7,15 @@ const rateLimit = require('express-rate-limit');
 
 const isDev = process.env.NODE_ENV !== 'production';
 
+// NODE_ENV พิมพ์ผิด/ไม่ได้ตั้งใน production จะทำให้ isDev เป็น true แบบเงียบๆ
+// (skip rate limit ให้ private IP ทั้งหมด) — log ให้เห็นชัดตอน startup กันหลุดโดยไม่รู้ตัว
+if (isDev && process.env.NODE_ENV && process.env.NODE_ENV !== 'development') {
+  console.warn(
+    `[rateLimit] NODE_ENV="${process.env.NODE_ENV}" ไม่ใช่ "production" หรือ "development" ` +
+    `— ระบบจะถือว่าเป็น dev mode และ skip rate limit ให้ localhost/private IP ตรวจสอบว่าตั้งค่าถูกต้องก่อน deploy จริง`
+  );
+}
+
 // Skip localhost + Docker internal network ตอน dev
 const skipLocalhost = (req) => {
   if (!isDev) return false;
@@ -91,4 +100,18 @@ const forgotPasswordLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { loginLimiter, googleLimiter, otpLimiter, registerLimiter, forgotPasswordLimiter };
+// 10 scrape requests per 5 min per IP — endpoint เปิด headless browser จริงทุกครั้ง แพงมาก
+const scrapeLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  skip: skipLocalhost,
+  message: {
+    success: false,
+    code: 'RATE_LIMIT',
+    message: 'เรียก scraping เกินจำนวนครั้งที่กำหนด กรุณารอ 5 นาทีแล้วลองใหม่',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+module.exports = { loginLimiter, googleLimiter, otpLimiter, registerLimiter, forgotPasswordLimiter, scrapeLimiter };

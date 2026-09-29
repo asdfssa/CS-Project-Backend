@@ -11,7 +11,7 @@
  *   PATCH  /api/t3/:id/faculty-review       → Staff บันทึกมติ Faculty Com (ผลสุดท้ายของ T3)
  */
 const path = require('path');
-const fs   = require('fs');
+const fs   = require('fs/promises');
 const T3Model     = require('../models/T3Model');
 const PreT3Model  = require('../models/PreT3Model');
 const UserModel   = require('../models/UserModel');
@@ -60,6 +60,10 @@ function normalizePublicationType(rawType, preT3) {
   }
   const tierMatch = String(preT3?.quartile_or_tier || '').match(/(\d+)/);
   const tier = tierMatch ? tierMatch[1] : null;
+  if (!NATIONAL_TIER_MAP[tier]) {
+    // แปลงจาก quartile_or_tier ไม่ได้ — เดา Tier2 ให้ แต่ log ไว้เพราะกระทบเครดิตนิสิตโดยตรง
+    console.warn(`[T3Controller] normalizePublicationType: parse tier ไม่ได้จาก quartile_or_tier="${preT3?.quartile_or_tier}" defaulting เป็น National_TCI_Tier2`);
+  }
   return NATIONAL_TIER_MAP[tier] || 'National_TCI_Tier2';
 }
 
@@ -526,41 +530,43 @@ class T3Controller {
       const { t3Id, student, majorAdvisor, journal_snapshot, paper_and_research_details } = result;
 
       // --- จัดการไฟล์ (ถ้ามี) ---
+      // เช็ค magic bytes ของทุกไฟล์ก่อน แล้วค่อยเขียนไฟล์ ถ้ามีไฟล์ไหนไม่ผ่านจะได้
+      // ไม่ต้อง rollback ไฟล์ที่เขียนไปแล้วบางส่วน (fail ก่อนเขียนไฟล์ไหนเลย)
       const evidenceFiles = {};
       const uploaded = {};
+      const entries = req.files ? Object.entries(req.files).filter(([f]) => FIELD_TO_KEY[f]) : [];
 
-      if (req.files && Object.keys(req.files).length > 0) {
-        for (const [fieldName, fileArr] of Object.entries(req.files)) {
-          const key = FIELD_TO_KEY[fieldName];
-          if (!key) continue;
-
-          const file = fileArr[0];
-
-          // เช็ค magic bytes จริง — fileFilter เช็คได้แค่ Content-Type ที่ client ส่งมา ปลอมได้
-          const isValidType = await verifyFileType(file.buffer);
-          if (!isValidType) {
-            return res.status(400).json({
-              success: false,
-              code: 'INVALID_FILE_CONTENT',
-              message: `ไฟล์ "${fieldName}" มีเนื้อหาไม่ตรงกับประเภทไฟล์ที่ประกาศไว้ (รองรับเฉพาะ PDF, JPG, PNG, WEBP)`,
-            });
-          }
-
-          // นามสกุลไฟล์ที่เก็บจริง ยึดตาม MIME ที่ fileFilter อนุมัติ ไม่ใช้นามสกุลจาก client
-          const ext      = MIME_TO_EXT[file.mimetype] || '.bin';
-          const filename = `${Date.now()}${ext}`;
-          const dir      = path.join(process.cwd(), 'uploads', 't3', String(t3Id), fieldName);
-
-          fs.mkdirSync(dir, { recursive: true });
-          const filePath     = path.join(dir, filename);
-          fs.writeFileSync(filePath, file.buffer);
-
-          const relativePath   = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
-          evidenceFiles[key]   = relativePath;
-          uploaded[fieldName]  = relativePath;
-
-          await T3Model.upsertEvidenceFile(t3Id, fieldName, relativePath);
+      for (const [fieldName, fileArr] of entries) {
+        const file = fileArr[0];
+        // เช็ค magic bytes จริง — fileFilter เช็คได้แค่ Content-Type ที่ client ส่งมา ปลอมได้
+        const isValidType = await verifyFileType(file.buffer);
+        if (!isValidType) {
+          return res.status(400).json({
+            success: false,
+            code: 'INVALID_FILE_CONTENT',
+            message: `ไฟล์ "${fieldName}" มีเนื้อหาไม่ตรงกับประเภทไฟล์ที่ประกาศไว้ (รองรับเฉพาะ PDF, JPG, PNG, WEBP)`,
+          });
         }
+      }
+
+      for (const [fieldName, fileArr] of entries) {
+        const key  = FIELD_TO_KEY[fieldName];
+        const file = fileArr[0];
+
+        // นามสกุลไฟล์ที่เก็บจริง ยึดตาม MIME ที่ fileFilter อนุมัติ ไม่ใช้นามสกุลจาก client
+        const ext      = MIME_TO_EXT[file.mimetype] || '.bin';
+        const filename = `${Date.now()}${ext}`;
+        const dir      = path.join(process.cwd(), 'uploads', 't3', String(t3Id), fieldName);
+
+        await fs.mkdir(dir, { recursive: true });
+        const filePath = path.join(dir, filename);
+        await fs.writeFile(filePath, file.buffer);
+
+        const relativePath   = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+        evidenceFiles[key]   = relativePath;
+        uploaded[fieldName]  = relativePath;
+
+        await T3Model.upsertEvidenceFile(t3Id, fieldName, relativePath);
       }
 
       // แจ้ง Advisor ทางอีเมล

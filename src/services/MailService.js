@@ -22,6 +22,10 @@ if (config.mail.mode === 'smtp') {
       pass: config.mail.smtp.pass,
     },
   });
+} else if (config.mail.mode !== 'console') {
+  // mode ตั้งผิด (ไม่ใช่ 'console' หรือ 'smtp') — transporter จะเป็น null เงียบๆ
+  // แล้วไปพังตอน sendMail() จริง (เช่นตอน login) แทนที่จะพังตอน startup ที่เห็นชัดกว่า
+  throw new Error(`MailService: config.mail.mode ต้องเป็น 'console' หรือ 'smtp' — ได้ค่า "${config.mail.mode}"`);
 }
 
 class MailService {

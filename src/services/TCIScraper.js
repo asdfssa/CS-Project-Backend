@@ -88,7 +88,8 @@ class TCIScraper {
       return print === normalizedIssn || online === normalizedIssn;
     });
 
-    return exact || apiResult[0];
+    // ไม่เจอ exact match → ถือว่าไม่พบวารสารนี้ ดีกว่าเดาวารสารอื่นที่ผลค้นหาใกล้เคียงมา
+    return exact || null;
   }
 
   static _parseJournal(journal, issn) {
