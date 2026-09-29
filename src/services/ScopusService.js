@@ -44,7 +44,7 @@ class ScopusService {
 
     } catch (err) {
       if (err.response?.status === 429) {
-        await scopusProxy.markKeyUnavailable(keyObj.index);
+        await scopusProxy.markKeyUnavailable(keyObj.index, err.response.headers);
         return ScopusService._fetchFromApi(issn);
       }
       if (err.response?.status === 404) {

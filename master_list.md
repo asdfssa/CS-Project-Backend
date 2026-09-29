@@ -171,9 +171,9 @@
 - [x] `UnwantedJournalController.updateOne` — ย้ายลบไฟล์ evidence เก่าไปหลัง UPDATE DB สำเร็จแล้วเท่านั้น (เดิมลบก่อน)
 
 ### 🟡 ความน่าเชื่อถือของ Scopus integration
-- [ ] `ScopusProxyService._persist()` — เชื่อม promise chain ต่อกันด้วย `this._writeQueue = this._writeQueue.then(() => this._writeAtomic(...))` ไม่มี `.catch` เลย → ถ้า `_writeAtomic` fail แม้แค่ครั้งเดียว (เช่น `fs.rename` ชน EPERM/EBUSY ชั่วคราว) queue จะค้าง rejected ตลอดไป ทุก call ถัดไปที่ `await this._persist()` (เช่นใน `incrementUsage()`) จะ throw ตลอด ทำให้ Scopus integration ทั้งระบบพังจนกว่าจะ restart process
-- [ ] `ScopusProxyService` per-second throttle — `_isThrottled()` เช็คจาก `recentRequestTimestamps` แต่ timestamp ถูกบันทึกใน `incrementUsage()` ซึ่งเรียก**หลัง** `axios.get` resolve แล้ว (ไม่ใช่ตอนเริ่มยิง) → ยิง request พร้อมกันหลายตัว (เช่น `Promise.all` sync วารสารหลายรายการ) จะผ่าน throttle check พร้อมกันหมดก่อนที่ตัวไหนจะ resolve เลย เกิด burst เกิน `PER_SECOND_LIMIT` จริงตามที่ระบบตั้งใจจะกัน
-- [ ] `ScopusService` — เจอ 429 ล็อค key เป็นเวลาคงที่ 1 ชม. เสมอ ไม่แยกว่าเป็น burst throttle ปกติหรือ weekly quota หมดจริง (ไม่อ่าน `err.response.headers` ตอน error เลย) → key ที่ quota หมดทั้งสัปดาห์จะถูกปลดล็อคหลัง 1 ชม. แล้วโดน 429 ซ้ำวนไปเรื่อยๆ แทนที่จะพักยาวจนถึง reset จริง
+- [x] `ScopusProxyService._persist()` — เปลี่ยนเป็น `this._writeQueue.catch(() => {}).then(...)` แล้วเก็บ queue ตัวใหม่ที่ `.catch(() => {})` เสมอ (ทดสอบแยกแล้วว่า write พังครั้งแรกไม่ทำให้ call ถัดไปพังตามด้วย — ดู commit) — call ปัจจุบันยัง reject ให้ caller เห็นตามเดิม
+- [x] `ScopusProxyService` per-second throttle — ย้ายการ push `recentRequestTimestamps` จาก `incrementUsage()` (หลัง response กลับมา) ไปที่ `getNextKey()` ตอนเลือก key เลย (ไม่มี `await` คั่นก่อนหน้า เลยไม่มี request อื่นแทรกได้)
+- [x] `ScopusService`/`ScopusProxyService` — `markKeyUnavailable()` รับ `rateLimitHeaders` เพิ่ม แยก weekly-quota-หมดจริง (ล็อคจนถึง `weeklyResetAt`) ออกจาก burst-429 ชั่วคราว (ล็อค 1 ชม. เหมือนเดิม) — extract `_applyRateLimitHeaders()` ใช้ร่วมกับ `incrementUsage()`
 
 ### 🟢 ควรพิจารณา (severity ต่ำ)
 - [ ] `AuthService._issueOtpForUser()` / `requestPasswordReset()` — เรียก `MailService.sendOtp()` แบบไม่ await ไม่เช็ค `{success,error}` ที่ return กลับมา → ถ้า SMTP พัง client จะได้ response ว่า "ส่ง OTP แล้ว" ทั้งที่ไม่มีอีเมลไปถึงจริง

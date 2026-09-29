@@ -71,6 +71,12 @@ class ScopusProxyService {
       }
       if (this._isThrottled(keyObj)) continue;
 
+      // นับ timestamp ตอน "เลือก" key นี้เลย ไม่ใช่ตอน response กลับมา (ใน
+      // incrementUsage() เดิม) — ฟังก์ชันนี้ไม่มี await เลยก่อนจุดนี้ เลยไม่มี
+      // request อื่นมาแทรกได้ กัน concurrent request หลายตัวผ่าน throttle check
+      // พร้อมกันหมดก่อนตัวไหนจะ resolve จริง (burst เกิน PER_SECOND_LIMIT)
+      keyObj.recentRequestTimestamps.push(Date.now());
+
       return keyObj;
     }
 
@@ -86,29 +92,44 @@ class ScopusProxyService {
     const keyObj = this.keys[keyIndex];
     if (!keyObj) return;
 
-    keyObj.recentRequestTimestamps.push(Date.now());
-
-    if (rateLimitHeaders) {
-      const limit = parseInt(rateLimitHeaders['x-ratelimit-limit'], 10);
-      const remaining = parseInt(rateLimitHeaders['x-ratelimit-remaining'], 10);
-      const reset = parseInt(rateLimitHeaders['x-ratelimit-reset'], 10);
-      if (!isNaN(limit)) keyObj.weeklyLimit = limit;
-      if (!isNaN(remaining)) keyObj.weeklyRemaining = remaining;
-      if (!isNaN(reset)) keyObj.weeklyResetAt = reset;
-    }
-
+    // recentRequestTimestamps ถูกนับไปแล้วตอน getNextKey() เลือก key นี้
+    this._applyRateLimitHeaders(keyObj, rateLimitHeaders);
     await this._persist();
   }
 
   /**
    * Mark key ว่าไม่ available ชั่วคราว (เจอ 429 จริงหลังหลุดรอด throttle แล้ว)
    * ใช้ timestamp แทน setTimeout เพื่อให้รอด restart (lazy-check ใน getNextKey/_isLocked)
+   *
+   * rateLimitHeaders (ถ้ามี — axios ใส่ header มาให้แม้ status เป็น error) ใช้แยกว่า
+   * 429 นี้เป็น weekly quota หมดจริงหรือแค่ burst throttle ชั่วคราว: ถ้า header บอกว่า
+   * weeklyRemaining <= 0 จริง ล็อคยาวจนถึง weeklyResetAt แทนที่จะล็อคแค่ 1 ชม. คงที่
+   * (ของเดิมปลดล็อคหลัง 1 ชม. แล้วโดน 429 ซ้ำวนไปเรื่อยๆ ทั้งที่ quota ยังไม่รีเซ็ตจริง)
    */
-  async markKeyUnavailable(keyIndex) {
+  async markKeyUnavailable(keyIndex, rateLimitHeaders = null) {
     const keyObj = this.keys[keyIndex];
     if (!keyObj) return;
-    keyObj.unavailableUntil = Date.now() + UNAVAILABLE_MS;
+
+    this._applyRateLimitHeaders(keyObj, rateLimitHeaders);
+
+    const quotaExhausted = keyObj.weeklyRemaining !== null && keyObj.weeklyRemaining <= 0;
+    const resetMs = keyObj.weeklyResetAt ? keyObj.weeklyResetAt * 1000 : null;
+
+    keyObj.unavailableUntil = (quotaExhausted && resetMs && resetMs > Date.now())
+      ? resetMs
+      : Date.now() + UNAVAILABLE_MS;
+
     await this._persist();
+  }
+
+  _applyRateLimitHeaders(keyObj, rateLimitHeaders) {
+    if (!rateLimitHeaders) return;
+    const limit = parseInt(rateLimitHeaders['x-ratelimit-limit'], 10);
+    const remaining = parseInt(rateLimitHeaders['x-ratelimit-remaining'], 10);
+    const reset = parseInt(rateLimitHeaders['x-ratelimit-reset'], 10);
+    if (!isNaN(limit)) keyObj.weeklyLimit = limit;
+    if (!isNaN(remaining)) keyObj.weeklyRemaining = remaining;
+    if (!isNaN(reset)) keyObj.weeklyResetAt = reset;
   }
 
   /**
@@ -159,8 +180,12 @@ class ScopusProxyService {
     }
 
     // serialize เขียนไฟล์ผ่าน queue กันสอง request พร้อมกันเขียนแข่งกันจนไฟล์พัง
-    this._writeQueue = this._writeQueue.then(() => this._writeAtomic(snapshot));
-    return this._writeQueue;
+    // .catch(() => {}) ก่อน .then() กัน queue ค้าง rejected ถาวรถ้าเขียนครั้งก่อนพัง
+    // (ไม่งั้น incrementUsage()/markKeyUnavailable() ถัดไปทุกครั้งจะ throw ตลอดไป
+    // จนกว่า process จะ restart) — แต่ยัง reject การเขียนครั้งนี้ให้ caller เห็นอยู่
+    const task = this._writeQueue.catch(() => {}).then(() => this._writeAtomic(snapshot));
+    this._writeQueue = task.catch(() => {});
+    return task;
   }
 
   async _writeAtomic(snapshot) {
