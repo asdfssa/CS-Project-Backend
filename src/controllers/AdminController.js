@@ -221,10 +221,12 @@ const [rows] = await db.query(
     try {
       const { id } = req.params;
       const [target] = await db.query(
-        `SELECT user_id, account_status FROM users WHERE user_id = ?`,
+        `SELECT user_id, account_status, role FROM users WHERE user_id = ?`,
         [id]
       );
       if (!target.length) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้' });
+      if (['Admin', 'SuperAdmin'].includes(target[0].role))
+        return res.status(403).json({ success: false, message: 'ไม่สามารถคืนสถานะ Admin ผ่านหน้านี้ได้' });
       if (target[0].account_status !== 'Suspended')
         return res.status(400).json({ success: false, message: 'สถานะต้องเป็น Suspended เท่านั้น' });
 
@@ -254,6 +256,8 @@ const [rows] = await db.query(
         [id]
       );
       if (!target.length) return res.status(404).json({ success: false, message: 'ไม่พบผู้ใช้' });
+      if (['Admin', 'SuperAdmin'].includes(target[0].role))
+        return res.status(403).json({ success: false, message: 'ไม่สามารถแก้ไขข้อมูล Admin ผ่านหน้านี้ได้' });
 
       const current = target[0];
       const body = req.body;

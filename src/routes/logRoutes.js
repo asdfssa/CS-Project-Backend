@@ -3,6 +3,7 @@
  * สำหรับแสดง logs ผ่าน web interface
  */
 const express = require('express');
+const { requireAuth, requireRole } = require('../middlewares/auth');
 const router = express.Router();
 
 // เก็บ logs ใน memory (สำหรับ demo)
@@ -67,13 +68,17 @@ module.exports = {
   }
 };
 
-// ปิดการเข้าถึงบน production (in-memory log viewer นี้ไม่ auth ตั้งใจไว้แค่ dev)
+// ปิดการเข้าถึงบน production เสมอ (กันเผื่อ NODE_ENV ถูกตั้งผิด/ไม่ได้ตั้ง — ดูด้านล่าง)
 router.use((req, res, next) => {
   if (process.env.NODE_ENV === 'production') {
     return res.status(404).json({ success: false, message: 'Not found' });
   }
   next();
 });
+
+// log viewer นี้เห็น OTP ที่ log ผ่าน console ตอน MAIL_MODE=console ได้ — ต้อง login
+// เป็น Admin/SuperAdmin เสมอ ไม่พึ่ง NODE_ENV เพียงอย่างเดียว (ตั้งผิด/ไม่ได้ตั้งจะรั่ว)
+router.use(requireAuth, requireRole('Admin', 'SuperAdmin'));
 
 // API endpoints
 router.get('/', (req, res) => {

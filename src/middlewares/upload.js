@@ -46,8 +46,12 @@ const T3_FIELDS = [
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const t3Id = req.params.id || 'unknown';
-    const dir  = path.join(process.cwd(), 'uploads', 't3', String(t3Id), file.fieldname);
+    // req.params.id มาจาก URL ตรงๆ — ต้องเช็คว่าเป็นเลขจำนวนเต็มบวกเท่านั้นก่อนเอาไปต่อ path
+    // กัน path traversal (เช่น ../../ ที่ผ่าน URL-encoding มา) เขียนไฟล์นอก uploads/
+    if (!/^\d+$/.test(String(req.params.id))) {
+      return cb(new Error('t3 id ไม่ถูกต้อง'));
+    }
+    const dir = path.join(process.cwd(), 'uploads', 't3', req.params.id, file.fieldname);
 
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);

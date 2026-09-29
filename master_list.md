@@ -156,11 +156,11 @@
 ไล่หาบั๊กแบบ full read-through ทั้ง `src/controllers/`, `src/models/`, `src/services/`, `src/middlewares/` + `src/routes/` + `src/utils/` + `src/config/` (4 รอบแยกกัน) เจอทั้งหมด 20 ข้อ เรียงตามความรุนแรง — **ยังไม่ได้แก้ข้อไหนเลย** รอสั่งก่อนเริ่ม
 
 ### 🔴 Critical — Account takeover / Security exploit ได้จริง
-- [ ] `AdminController.updateUser` (`PATCH /api/manage/users/:id`) — ไม่เช็ค role ของ target เลย ทั้งที่ route นี้ Staff เข้าถึงได้ด้วย (`userManageRoutes.js` อนุญาต Admin/SuperAdmin/Staff) → Staff แก้ `msu_mail` ของ Admin/SuperAdmin ได้ แล้วใช้ `POST /api/auth/forgot-password` ยึด account Admin ต่อได้เลย (OTP ส่งไปอีเมลที่เพิ่งเปลี่ยน)
-- [ ] `AdminController.activateUser` — ไม่เช็ค role ของ target เหมือน `suspendUser` (ที่ block `['Admin','SuperAdmin']` อยู่แล้ว) → Staff เรียก `PATCH /api/manage/users/:id/activate` reactivate Admin ที่ถูก suspend ไปได้ ข้าม guard ของ `activateAdmin` ที่ตั้งใจจำกัดไว้
-- [ ] `src/routes/logRoutes.js` — ไม่มี auth middleware เลย มีแค่ guard `NODE_ENV === 'production' → 404` ที่เพิ่งแก้ไป (ดู Section B) แต่ถ้า `NODE_ENV` ไม่ใช่ `production` เป๊ะๆ (unset/staging/พิมพ์ผิด) ใครก็เรียก `GET /api/v3/logs` อ่าน OTP ที่ log ผ่าน `logger.otp()` (ตอน `MAIL_MODE=console`) ได้ทันที ข้าม 2FA ทั้งระบบ
-- [ ] `src/middlewares/upload.js` — `storage.destination` ใช้ `req.params.id` ตรงๆ ใน `path.join()` ไม่มีการเช็คว่าเป็นตัวเลข (route `:id` ไม่มี regex constraint) → path traversal ผ่าน URL-encoded `../` ใน param ได้ (Express decode param หลัง match route) เขียนไฟล์นอก `uploads/` ได้
-- [ ] `src/services/AuthService.js` (googleLogin บรรทัด ~157, registerStaff บรรทัด ~399) — เช็ค domain เป็น `domain !== config.google.allowedDomain && domain !== 'gmail.com'` แปลว่าอีเมล gmail.com ธรรมดาผ่านเงื่อนไขได้เสมอ ทั้งที่ error message บอกว่าอนุญาตเฉพาะ `@msu.ac.th` — ถ้าไม่ได้ตั้งใจไว้เป็น backdoor ทดสอบ ต้องตัดออก
+- [x] `AdminController.updateUser` — เพิ่ม guard block `['Admin','SuperAdmin']` เหมือน `suspendUser` แล้ว (403 ถ้า target เป็น Admin/SuperAdmin)
+- [x] `AdminController.activateUser` — เพิ่ม guard block `['Admin','SuperAdmin']` เหมือนกัน + select `role` เพิ่มใน query
+- [x] `src/routes/logRoutes.js` — เพิ่ม `requireAuth, requireRole('Admin','SuperAdmin')` ทั้ง router ไม่พึ่ง `NODE_ENV` guard เพียงอย่างเดียวอีกต่อไป
+- [x] `src/middlewares/upload.js` — `storage.destination` เช็ค `req.params.id` ด้วย `/^\d+$/` ก่อนต่อ path เสมอ ไม่ผ่านให้ `cb(new Error(...))` (เพิ่ม error-code handling ใน `uploadRoutes.js` ด้วย)
+- [x] `src/services/AuthService.js` (googleLogin, registerStaff) — ตัดเงื่อนไข `domain !== 'gmail.com'` ออก เหลือเช็คแค่ `config.google.allowedDomain` ตรงกับ error message ที่บอกไว้
 
 ### 🟠 บั๊กกระทบข้อมูล/สิทธิ์
 - [ ] `PreT3Model.create()` / `T3Model.create()` — INSERT หลัก + insert `request_approvals` แต่ละแถว เป็นคนละ `db.query()` แยกกัน ไม่ได้ wrap ด้วย `withTransaction()` เหมือนฟังก์ชันอื่นในไฟล์เดียวกัน → ถ้า insert approval row กลางทางพัง (เช่น advisor id หลุด) จะเหลือ request ที่ไม่มีแถว approval เลย มองไม่เห็นจากทุกฝั่ง reviewer ถาวร

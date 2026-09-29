@@ -153,7 +153,7 @@ class AuthService {
     }
 
     const domain = email.split('@')[1];
-    if (domain !== config.google.allowedDomain && domain !== 'gmail.com') {
+    if (domain !== config.google.allowedDomain) {
       throw new AuthError(
         `อนุญาตเฉพาะอีเมล @${config.google.allowedDomain} เท่านั้น`,
         'INVALID_DOMAIN',
@@ -395,7 +395,7 @@ class AuthService {
 
     // เช็ค domain
     const domain = email.split('@')[1];
-    if (domain !== config.google.allowedDomain && domain !== 'gmail.com') {
+    if (domain !== config.google.allowedDomain) {
       throw new AuthError(
         `เฉพาะ @${config.google.allowedDomain} เท่านั้น`,
         'INVALID_DOMAIN',

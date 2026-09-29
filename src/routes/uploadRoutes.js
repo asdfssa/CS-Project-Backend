@@ -24,6 +24,13 @@ const handleMulterError = (err, req, res, next) => {
       message: err.message,
     });
   }
+  if (err.message === 't3 id ไม่ถูกต้อง') {
+    return res.status(400).json({
+      success: false,
+      code: 'INVALID_T3_ID',
+      message: err.message,
+    });
+  }
   next(err);
 };
 
