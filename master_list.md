@@ -176,12 +176,12 @@
 - [x] `ScopusService`/`ScopusProxyService` — `markKeyUnavailable()` รับ `rateLimitHeaders` เพิ่ม แยก weekly-quota-หมดจริง (ล็อคจนถึง `weeklyResetAt`) ออกจาก burst-429 ชั่วคราว (ล็อค 1 ชม. เหมือนเดิม) — extract `_applyRateLimitHeaders()` ใช้ร่วมกับ `incrementUsage()`
 
 ### 🟢 ควรพิจารณา (severity ต่ำ)
-- [ ] `AuthService._issueOtpForUser()` / `requestPasswordReset()` — เรียก `MailService.sendOtp()` แบบไม่ await ไม่เช็ค `{success,error}` ที่ return กลับมา → ถ้า SMTP พัง client จะได้ response ว่า "ส่ง OTP แล้ว" ทั้งที่ไม่มีอีเมลไปถึงจริง
-- [ ] `_approvalHelpers.reviewAdvisorSlot()` / `PreT3Model.facultyReview()` / `T3Model.facultyReview()` — เช็ค action ด้วย `action === 'approve' ? 'Approved' : 'Rejected'` ไม่ validate ค่า `action` เลย → ค่าที่ไม่คาดคิด (`undefined`/พิมพ์ผิด) จะถูกตีความเป็น "ปฏิเสธ" เงียบๆ แทนที่จะ error
-- [ ] `src/middlewares/rateLimit.js` — `skipLocalhost` เช็ค `ip.startsWith('172.')` ซึ่งครอบคลุม `172.0.0.0/8` ทั้งช่วง ทั้งที่ Docker bridge จริงคือ `172.16.0.0/12` เท่านั้น → ตอน dev mode ผู้ใช้จริงที่ IP สาธารณะขึ้นต้นด้วย 172 (มีเยอะ เช่น Cloudflare, Google) จะโดน skip rate limit ไปด้วย
-- [ ] `src/middlewares/rateLimit.js` + `app.js` (`trust proxy: 1`) — `skipLocalhost` เชื่อ `req.ip` ซึ่งมาจาก header `X-Forwarded-For` ที่ client กำหนดเองได้ ถ้า server ไม่ได้อยู่หลัง reverse proxy จริง (ปกติตอน dev/staging) → ส่ง header ปลอมเป็น `127.0.0.1` ได้ บายพาส rate limit ทุกตัวจากเครื่องไหนก็ได้
-- [ ] `src/routes/authRoutes.js` — `POST /auth/refresh` ไม่มี rate limiter เลย ทั้งที่ endpoint auth อื่นๆ ทุกตัวมี (`login`/`verify-otp`/`resend-otp`/`reset-password`/`google`/`register-staff`/`forgot-password`)
-- [ ] `ScopusProxyService` weekly-quota lazy reset (บรรทัด ~63-71) — reset `weeklyRemaining` ใน memory ตรงๆ ไม่เรียก `_persist()` ทันที (self-heal ได้เองรอบถัดไป แต่ไม่ตรงกับ "write-through" ที่ comment หัวไฟล์บอกไว้ severity ต่ำสุดในกลุ่มนี้)
+- [x] `AuthService._issueOtpForUser()` / `requestPasswordReset()` — เปลี่ยนเป็น `await` `MailService.sendOtp()` แล้วเช็ค `.success` throw `AuthError('OTP_SEND_FAILED', 502)` ถ้าส่งไม่สำเร็จ แทนที่จะตอบ client ว่าสำเร็จทั้งที่ไม่มีอีเมลไปถึง
+- [x] `_approvalHelpers.reviewAdvisorSlot()` / `PreT3Model.facultyReview()` / `T3Model.facultyReview()` — เพิ่ม validate `action` ต้องเป็น `'approve'`/`'reject'` เท่านั้น ไม่งั้น throw (controller เช็คอยู่แล้วก่อนเรียก แต่เพิ่มเป็น defense-in-depth ที่ model layer ด้วย)
+- [x] `src/middlewares/rateLimit.js` — เขียน `isPrivateOrLoopback()` ใหม่ เช็ค RFC1918 range ให้ถูกต้อง (`172.16.0.0/12` แทน `172.` ทั้งช่วง)
+- [x] `src/middlewares/rateLimit.js` — เปลี่ยน `skipLocalhost` จากอ่าน `req.ip` (มาจาก header ที่ปลอมได้) เป็น `req.socket.remoteAddress` (TCP peer address จริง ปลอมไม่ได้)
+- [x] `src/routes/authRoutes.js` — เพิ่ม `refreshLimiter` (30 ครั้ง/15 นาที/IP) ให้ `POST /auth/refresh` เหมือน endpoint auth อื่นๆ
+- [x] `ScopusProxyService` weekly-quota lazy reset — เพิ่ม `await this._persist()` ทันทีหลัง reset `weeklyRemaining` ใน `getNextKey()`
 
 ---
 

@@ -277,7 +277,10 @@ class AuthService {
       expiresAt,
     });
 
-    MailService.sendOtp(user.msu_mail, otpCode, 'login_2fa');
+    const mailResult = await MailService.sendOtp(user.msu_mail, otpCode, 'login_2fa');
+    if (!mailResult.success) {
+      throw new AuthError('ส่ง OTP ไม่สำเร็จ กรุณาลองใหม่ภายหลัง', 'OTP_SEND_FAILED', 502);
+    }
   }
 
   static _maskEmail(email) {
@@ -320,7 +323,10 @@ class AuthService {
       expiresAt,
     });
 
-    MailService.sendOtp(user.msu_mail, otpCode, 'password_reset');
+    const mailResult = await MailService.sendOtp(user.msu_mail, otpCode, 'password_reset');
+    if (!mailResult.success) {
+      throw new AuthError('ส่ง OTP ไม่สำเร็จ กรุณาลองใหม่ภายหลัง', 'OTP_SEND_FAILED', 502);
+    }
 
     const resetOtpToken = jwtUtil.issuePasswordResetOtpToken(user.user_id);
 

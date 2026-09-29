@@ -65,6 +65,7 @@ class ScopusProxyService {
         // ให้ลองใหม่ได้ ปล่อยให้ response ถัดไปแก้ตัวเลขให้ถูกต้องเอง
         if (keyObj.weeklyResetAt && Date.now() / 1000 >= keyObj.weeklyResetAt) {
           keyObj.weeklyRemaining = keyObj.weeklyLimit;
+          await this._persist(); // เขียนลงไฟล์ทันที ให้ตรงกับ "write-through" ตามที่ตั้งใจไว้
         } else {
           continue;
         }

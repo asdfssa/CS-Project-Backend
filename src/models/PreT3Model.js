@@ -393,6 +393,9 @@ class PreT3Model {
    * @param {string|null} remark
    */
   static async facultyReview(preT3Id, action, meetingNo, meetingDate, remark) {
+    if (!['approve', 'reject'].includes(action)) {
+      throw new Error(`PreT3Model.facultyReview: invalid action "${action}"`);
+    }
     const status = action === 'approve' ? 'Approved' : 'Rejected';
 
     return withTransaction(async (conn) => {

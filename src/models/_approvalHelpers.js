@@ -58,6 +58,10 @@ async function fetchApprovalsMap(requestType, requestIds) {
  *   เข้ามาเพื่อให้ atomic กับ UPDATE overall_status ที่ caller ทำต่อ
  */
 async function reviewAdvisorSlot(conn, requestType, requestId, advisorId, action, remark) {
+  if (!['approve', 'reject'].includes(action)) {
+    throw new Error(`reviewAdvisorSlot: invalid action "${action}"`);
+  }
+
   const [pendingSlot] = await conn.query(
     `SELECT approval_id, step FROM request_approvals
       WHERE request_type = ? AND request_id = ?

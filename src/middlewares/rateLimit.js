@@ -16,18 +16,28 @@ if (isDev && process.env.NODE_ENV && process.env.NODE_ENV !== 'development') {
   );
 }
 
+// เช็คว่าเป็น loopback หรือ RFC1918 private range จริงๆ (10.0.0.0/8, 172.16.0.0/12,
+// 192.168.0.0/16) — ของเดิมเช็คแค่ ip.startsWith('172.') ซึ่งครอบคลุมทั้ง 172.0.0.0/8
+// (รวม public IP จริงของหลายเจ้า เช่น Cloudflare/Google ที่ขึ้นต้นด้วย 172 เหมือนกัน)
+function isPrivateOrLoopback(ip) {
+  if (!ip) return false;
+  const v4 = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+  if (ip === '::1' || v4 === '127.0.0.1' || v4.startsWith('127.')) return true;
+  const parts = v4.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(Number.isNaN)) return false;
+  const [a, b] = parts;
+  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
 // Skip localhost + Docker internal network ตอน dev
+// ใช้ req.socket.remoteAddress (peer address จริงของ TCP connection) แทน req.ip
+// เพราะ req.ip อ่านจาก header X-Forwarded-For ที่ client ปลอมได้เอง (ตั้ง trust proxy
+// ไว้ที่ app.js) ถ้า server ไม่ได้อยู่หลัง reverse proxy จริง (ปกติตอน dev/staging)
+// ก็จะปลอม header เป็น 127.0.0.1 บายพาส rate limit ได้ — remoteAddress ปลอมไม่ได้
 const skipLocalhost = (req) => {
   if (!isDev) return false;
-  const ip = req.ip || req.connection?.remoteAddress || '';
-  return (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    ip.startsWith('172.') ||   // Docker bridge network
-    ip.startsWith('192.168.') ||
-    ip.startsWith('10.')
-  );
+  const ip = req.socket?.remoteAddress || req.connection?.remoteAddress || '';
+  return isPrivateOrLoopback(ip);
 };
 
 // 5 login attempts per 15 min per IP (username/password)
@@ -86,6 +96,21 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// 30 refresh attempts per 15 min per IP — เหมือน endpoint auth อื่นๆ ที่มี rate
+// limiter ครบทุกตัว จุดนี้เดิมไม่มีเลย ทั้งที่เป็น endpoint ที่ query DB ทุกครั้ง
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  skip: skipLocalhost,
+  message: {
+    success: false,
+    code: 'RATE_LIMIT',
+    message: 'ขอ refresh token เกินจำนวนครั้งที่กำหนด กรุณารอ 15 นาทีแล้วลองใหม่',
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // 5 forgot-password requests per 15 min per IP
 const forgotPasswordLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -114,4 +139,4 @@ const scrapeLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-module.exports = { loginLimiter, googleLimiter, otpLimiter, registerLimiter, forgotPasswordLimiter, scrapeLimiter };
+module.exports = { loginLimiter, googleLimiter, otpLimiter, registerLimiter, forgotPasswordLimiter, scrapeLimiter, refreshLimiter };

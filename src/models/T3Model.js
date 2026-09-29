@@ -453,6 +453,9 @@ class T3Model {
    * ของ T3 (A6: ตัด grad_school_* ออกทั้งหมด ไม่มี step ถัดจากนี้อีกแล้ว)
    */
   static async facultyReview(t3Id, action, meetingNo, meetingDate, remark) {
+    if (!['approve', 'reject'].includes(action)) {
+      throw new Error(`T3Model.facultyReview: invalid action "${action}"`);
+    }
     const status = action === 'approve' ? 'Approved' : 'Rejected';
 
     return withTransaction(async (conn) => {
