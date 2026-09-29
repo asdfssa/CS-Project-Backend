@@ -55,7 +55,10 @@ module.exports = {
   },
     google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
-    allowedDomain: process.env.GOOGLE_ALLOWED_DOMAIN || 'msu.ac.th',
+    // GOOGLE_ALLOWED_DOMAIN รับได้หลาย domain คั่นด้วย , (เช่น "msu.ac.th,gmail.com" ตอน dev
+    // เพื่อทดสอบด้วย Google account ส่วนตัว) — allowedDomain ตัวแรกใช้โชว์ใน error message
+    allowedDomains: (process.env.GOOGLE_ALLOWED_DOMAIN || 'msu.ac.th').split(',').map(d => d.trim()),
+    get allowedDomain() { return this.allowedDomains[0]; },
   },
   scopus: {
     apiKeys: [

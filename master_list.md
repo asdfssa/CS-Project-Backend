@@ -160,7 +160,7 @@
 - [x] `AdminController.activateUser` — เพิ่ม guard block `['Admin','SuperAdmin']` เหมือนกัน + select `role` เพิ่มใน query
 - [x] `src/routes/logRoutes.js` — เพิ่ม `requireAuth, requireRole('Admin','SuperAdmin')` ทั้ง router ไม่พึ่ง `NODE_ENV` guard เพียงอย่างเดียวอีกต่อไป
 - [x] `src/middlewares/upload.js` — `storage.destination` เช็ค `req.params.id` ด้วย `/^\d+$/` ก่อนต่อ path เสมอ ไม่ผ่านให้ `cb(new Error(...))` (เพิ่ม error-code handling ใน `uploadRoutes.js` ด้วย)
-- [x] `src/services/AuthService.js` (googleLogin, registerStaff) — ตัดเงื่อนไข `domain !== 'gmail.com'` ออก เหลือเช็คแค่ `config.google.allowedDomain` ตรงกับ error message ที่บอกไว้
+- [x] `src/services/AuthService.js` (googleLogin, registerStaff) — ตัด hardcode `domain !== 'gmail.com'` ออกจากโค้ด เปลี่ยนเป็นเช็คจาก `config.google.allowedDomains` (array) แทน — `GOOGLE_ALLOWED_DOMAIN` ใน `.env` รับได้หลาย domain คั่นด้วย `,` แล้ว (`.env` เครื่อง dev ตั้งเป็น `msu.ac.th,gmail.com` ไว้ทดสอบ, `.env.example` default ยังเป็น `msu.ac.th` เดี่ยวๆ ปลอดภัยสำหรับ clone ใหม่ — **ต้องเอา `gmail.com` ออกจาก `.env` ก่อน deploy จริง**)
 
 ### 🟠 บั๊กกระทบข้อมูล/สิทธิ์
 - [ ] `PreT3Model.create()` / `T3Model.create()` — INSERT หลัก + insert `request_approvals` แต่ละแถว เป็นคนละ `db.query()` แยกกัน ไม่ได้ wrap ด้วย `withTransaction()` เหมือนฟังก์ชันอื่นในไฟล์เดียวกัน → ถ้า insert approval row กลางทางพัง (เช่น advisor id หลุด) จะเหลือ request ที่ไม่มีแถว approval เลย มองไม่เห็นจากทุกฝั่ง reviewer ถาวร
