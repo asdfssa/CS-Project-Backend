@@ -358,20 +358,30 @@ class UnwantedJournalController {
           return res.status(400).json({ success: false, message: 'ชื่อวารสารห้ามว่าง' });
         }
 
-        // คำนวณ evidence_file_path ใหม่
+        // เช็ค ISSN ซ้ำกับ record อื่น (schema เป็นแค่ INDEX ไม่ใช่ UNIQUE เลย DB ไม่กันให้)
+        if (merged.issn && merged.issn !== cur.issn) {
+          const [dup] = await db.query(
+            `SELECT unwanted_id FROM msu_unwanted_journals WHERE issn = ? AND unwanted_id != ?`,
+            [merged.issn, id]
+          );
+          if (dup.length) {
+            if (req.file) fs.unlinkSync(req.file.path);
+            return res.status(400).json({ success: false, message: `ISSN ${merged.issn} มีอยู่ในรายการแล้ว` });
+          }
+        }
+
+        // คำนวณ evidence_file_path ใหม่ — ยังไม่ลบไฟล์เก่าตอนนี้ รอ UPDATE สำเร็จก่อน
+        // (ลบก่อนแล้ว UPDATE ล้มเหลวทีหลัง จะเหลือ DB row ชี้ไฟล์ที่ไม่มีอยู่จริง)
         let newEvidencePath = cur.evidence_file_path;
+        let oldPathToDelete = null;
         if (req.file) {
-          // อัปโหลดไฟล์ใหม่ → ลบไฟล์เก่าก่อน
           if (cur.evidence_file_path) {
-            const oldPath = path.join(process.cwd(), cur.evidence_file_path);
-            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            oldPathToDelete = path.join(process.cwd(), cur.evidence_file_path);
           }
           newEvidencePath = path.relative(process.cwd(), req.file.path).replace(/\\/g, '/');
         } else if (body.clear_evidence === 'true') {
-          // ลบไฟล์โดยไม่อัปโหลดใหม่
           if (cur.evidence_file_path) {
-            const oldPath = path.join(process.cwd(), cur.evidence_file_path);
-            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            oldPathToDelete = path.join(process.cwd(), cur.evidence_file_path);
           }
           newEvidencePath = null;
         }
@@ -384,6 +394,9 @@ class UnwantedJournalController {
           [merged.issn, merged.journal_name, merged.publisher, merged.note,
            newEvidencePath, merged.recorded_date, id]
         );
+
+        // UPDATE สำเร็จแล้วค่อยลบไฟล์เก่าทิ้ง
+        if (oldPathToDelete && fs.existsSync(oldPathToDelete)) fs.unlinkSync(oldPathToDelete);
 
         return res.json({ success: true, message: 'แก้ไขวารสารเรียบร้อยแล้ว' });
       } catch (err2) {

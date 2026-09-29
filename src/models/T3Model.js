@@ -61,55 +61,57 @@ class T3Model {
   ) {
     const { majorAdvisorId, coAdvisor1Id = null, coAdvisor2Id = null } = advisorIds;
 
-    const [result] = await db.query(
-      `INSERT INTO t3_requests
-         (pre_t3_id, student_id,
-          title_thai, title_english, first_author, corresponding_author,
-          innovation_type, innovation_detail,
-          publication_type, weight_score, specified_database, publication_status,
-          volume, issue, publish_year,
-          has_impact_score, impact_factor, citescore, score_year,
-          overall_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`,
-      [
-        preT3Id,
-        studentId,
-        paperAndResearchDetails.title_thai,
-        paperAndResearchDetails.title_english,
-        paperAndResearchDetails.first_author,
-        paperAndResearchDetails.corresponding_author,
-        paperAndResearchDetails.innovation_type || 'None',
-        paperAndResearchDetails.innovation_detail || null,
-        publicationDetails.type,
-        publicationDetails.weight_score,
-        publicationDetails.specified_database || null,
-        publicationDetails.status,
-        publicationDetails.volume || null,
-        publicationDetails.issue || null,
-        publicationDetails.publish_year || null,
-        journalMetrics.has_impact_score ? 1 : 0,
-        journalMetrics.impact_factor ?? null,
-        journalMetrics.citescore ?? null,
-        journalMetrics.score_year || null,
-      ]
-    );
-
-    const t3Id = result.insertId;
-
-    const approvalRows = [['Advisor', majorAdvisorId]];
-    if (coAdvisor1Id) approvalRows.push(['Co_Advisor_1', coAdvisor1Id]);
-    if (coAdvisor2Id) approvalRows.push(['Co_Advisor_2', coAdvisor2Id]);
-    approvalRows.push(['Faculty_Committee', null]);
-
-    for (const [step, approverId] of approvalRows) {
-      await db.query(
-        `INSERT INTO request_approvals (request_type, request_id, step, approver_id, status)
-         VALUES ('T3', ?, ?, ?, 'Pending')`,
-        [t3Id, step, approverId]
+    return withTransaction(async (conn) => {
+      const [result] = await conn.query(
+        `INSERT INTO t3_requests
+           (pre_t3_id, student_id,
+            title_thai, title_english, first_author, corresponding_author,
+            innovation_type, innovation_detail,
+            publication_type, weight_score, specified_database, publication_status,
+            volume, issue, publish_year,
+            has_impact_score, impact_factor, citescore, score_year,
+            overall_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending')`,
+        [
+          preT3Id,
+          studentId,
+          paperAndResearchDetails.title_thai,
+          paperAndResearchDetails.title_english,
+          paperAndResearchDetails.first_author,
+          paperAndResearchDetails.corresponding_author,
+          paperAndResearchDetails.innovation_type || 'None',
+          paperAndResearchDetails.innovation_detail || null,
+          publicationDetails.type,
+          publicationDetails.weight_score,
+          publicationDetails.specified_database || null,
+          publicationDetails.status,
+          publicationDetails.volume || null,
+          publicationDetails.issue || null,
+          publicationDetails.publish_year || null,
+          journalMetrics.has_impact_score ? 1 : 0,
+          journalMetrics.impact_factor ?? null,
+          journalMetrics.citescore ?? null,
+          journalMetrics.score_year || null,
+        ]
       );
-    }
 
-    return t3Id;
+      const t3Id = result.insertId;
+
+      const approvalRows = [['Advisor', majorAdvisorId]];
+      if (coAdvisor1Id) approvalRows.push(['Co_Advisor_1', coAdvisor1Id]);
+      if (coAdvisor2Id) approvalRows.push(['Co_Advisor_2', coAdvisor2Id]);
+      approvalRows.push(['Faculty_Committee', null]);
+
+      for (const [step, approverId] of approvalRows) {
+        await conn.query(
+          `INSERT INTO request_approvals (request_type, request_id, step, approver_id, status)
+           VALUES ('T3', ?, ?, ?, 'Pending')`,
+          [t3Id, step, approverId]
+        );
+      }
+
+      return t3Id;
+    });
   }
 
   // ============================================================
@@ -421,6 +423,14 @@ class T3Model {
 
   static async advisorReview(t3Id, advisorId, action, remark) {
     return withTransaction(async (conn) => {
+      // ล็อค row + เช็ค overall_status สดในทรานแซกชันนี้ กัน race กับ cancel()/
+      // action อื่นที่อาจเปลี่ยนสถานะไปแล้วตั้งแต่ controller อ่านมาก่อนหน้านี้
+      const [reqRows] = await conn.query(
+        `SELECT overall_status FROM t3_requests WHERE t3_id = ? FOR UPDATE`,
+        [t3Id]
+      );
+      if (!reqRows.length || reqRows[0].overall_status !== 'Pending') return null;
+
       const result = await reviewAdvisorSlot(conn, 'T3', t3Id, advisorId, action, remark);
       if (!result) return null;
       const { anyRejected, allApproved } = result;
@@ -446,6 +456,12 @@ class T3Model {
     const status = action === 'approve' ? 'Approved' : 'Rejected';
 
     return withTransaction(async (conn) => {
+      const [reqRows] = await conn.query(
+        `SELECT overall_status FROM t3_requests WHERE t3_id = ? FOR UPDATE`,
+        [t3Id]
+      );
+      if (!reqRows.length || reqRows[0].overall_status !== 'Pending') return null;
+
       await conn.query(
         `UPDATE request_approvals
             SET status = ?, meeting_no = ?, meeting_date = ?, remark = ?, decided_at = NOW()

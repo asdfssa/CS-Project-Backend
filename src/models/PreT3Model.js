@@ -53,48 +53,50 @@ class PreT3Model {
   static async create(studentId, journalSnapshot, checklistData, advisorIds, articleInfo) {
     const { majorAdvisorId, coAdvisor1Id = null, coAdvisor2Id = null } = advisorIds;
 
-    const [result] = await db.query(
-      `INSERT INTO pre_t3_requests
-         (student_id,
-          issn, journal_name, journal_url, indexed_database, quartile_or_tier,
-          is_discontinued, is_hijacked,
-          article_title_en, article_title_th, article_authors, article_doi,
-          ${CHECKLIST_COLUMNS.join(', ')},
-          overall_status, resubmit_count)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${CHECKLIST_COLUMNS.map(() => '?').join(', ')}, 'Pending', 0)`,
-      [
-        studentId,
-        journalSnapshot.issn,
-        journalSnapshot.journal_name,
-        journalSnapshot.journal_url || null,
-        journalSnapshot.indexed_database,
-        journalSnapshot.quartile_or_tier || null,
-        journalSnapshot.is_discontinued ? 1 : 0,
-        journalSnapshot.is_hijacked ? 1 : 0,
-        articleInfo?.title_en || null,
-        articleInfo?.title_th || null,
-        articleInfo?.authors || null,
-        articleInfo?.doi || null,
-        ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (checklistData[`item${i}`] ? 1 : 0)),
-      ]
-    );
-
-    const preT3Id = result.insertId;
-
-    const approvalRows = [['Advisor', majorAdvisorId]];
-    if (coAdvisor1Id) approvalRows.push(['Co_Advisor_1', coAdvisor1Id]);
-    if (coAdvisor2Id) approvalRows.push(['Co_Advisor_2', coAdvisor2Id]);
-    approvalRows.push(['Faculty_Committee', null]);
-
-    for (const [step, approverId] of approvalRows) {
-      await db.query(
-        `INSERT INTO request_approvals (request_type, request_id, step, approver_id, status)
-         VALUES ('Pre_T3', ?, ?, ?, 'Pending')`,
-        [preT3Id, step, approverId]
+    return withTransaction(async (conn) => {
+      const [result] = await conn.query(
+        `INSERT INTO pre_t3_requests
+           (student_id,
+            issn, journal_name, journal_url, indexed_database, quartile_or_tier,
+            is_discontinued, is_hijacked,
+            article_title_en, article_title_th, article_authors, article_doi,
+            ${CHECKLIST_COLUMNS.join(', ')},
+            overall_status, resubmit_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${CHECKLIST_COLUMNS.map(() => '?').join(', ')}, 'Pending', 0)`,
+        [
+          studentId,
+          journalSnapshot.issn,
+          journalSnapshot.journal_name,
+          journalSnapshot.journal_url || null,
+          journalSnapshot.indexed_database,
+          journalSnapshot.quartile_or_tier || null,
+          journalSnapshot.is_discontinued ? 1 : 0,
+          journalSnapshot.is_hijacked ? 1 : 0,
+          articleInfo?.title_en || null,
+          articleInfo?.title_th || null,
+          articleInfo?.authors || null,
+          articleInfo?.doi || null,
+          ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => (checklistData[`item${i}`] ? 1 : 0)),
+        ]
       );
-    }
 
-    return preT3Id;
+      const preT3Id = result.insertId;
+
+      const approvalRows = [['Advisor', majorAdvisorId]];
+      if (coAdvisor1Id) approvalRows.push(['Co_Advisor_1', coAdvisor1Id]);
+      if (coAdvisor2Id) approvalRows.push(['Co_Advisor_2', coAdvisor2Id]);
+      approvalRows.push(['Faculty_Committee', null]);
+
+      for (const [step, approverId] of approvalRows) {
+        await conn.query(
+          `INSERT INTO request_approvals (request_type, request_id, step, approver_id, status)
+           VALUES ('Pre_T3', ?, ?, ?, 'Pending')`,
+          [preT3Id, step, approverId]
+        );
+      }
+
+      return preT3Id;
+    });
   }
 
   // ============================================================
@@ -352,6 +354,14 @@ class PreT3Model {
    */
   static async advisorReview(preT3Id, advisorId, action, remark) {
     return withTransaction(async (conn) => {
+      // ล็อค row + เช็ค overall_status สดในทรานแซกชันนี้ กัน race กับ cancel()/
+      // action อื่นที่อาจเปลี่ยนสถานะไปแล้วตั้งแต่ controller อ่านมาก่อนหน้านี้
+      const [reqRows] = await conn.query(
+        `SELECT overall_status FROM pre_t3_requests WHERE pre_t3_id = ? FOR UPDATE`,
+        [preT3Id]
+      );
+      if (!reqRows.length || reqRows[0].overall_status !== 'Pending') return null;
+
       const result = await reviewAdvisorSlot(conn, 'Pre_T3', preT3Id, advisorId, action, remark);
       if (!result) return null;
       const { anyRejected, allApproved } = result;
@@ -386,6 +396,12 @@ class PreT3Model {
     const status = action === 'approve' ? 'Approved' : 'Rejected';
 
     return withTransaction(async (conn) => {
+      const [reqRows] = await conn.query(
+        `SELECT overall_status FROM pre_t3_requests WHERE pre_t3_id = ? FOR UPDATE`,
+        [preT3Id]
+      );
+      if (!reqRows.length || reqRows[0].overall_status !== 'Pending') return null;
+
       await conn.query(
         `UPDATE request_approvals
             SET status = ?, meeting_no = ?, meeting_date = ?, remark = ?, decided_at = NOW()

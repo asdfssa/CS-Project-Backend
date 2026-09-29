@@ -376,37 +376,50 @@ if (role === 'Student') {
         }
       }
 
-      // ===== Insert user =====
-      const [result] = await db.query(
-        `INSERT INTO users
-           (msu_mail,
-            role, prefix, first_name, last_name,
-            phone, degree_level, curriculum_year, study_plan_code,
-            account_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')`,
-        [
-          mailLower, role,
-          prefix || null, first_name.trim(), last_name.trim(),
-          phone || null,
-          degree_level || null, curriculum_year || null, study_plan_code || null,
-        ]
-      );
-      const newUserId = result.insertId;
+      // ===== Insert user + advisor_assignments ในทรานแซกชันเดียว =====
+      // กัน user ถูกสร้างค้างไว้แบบไม่มี advisor ถ้า insert assignment พังกลางทาง
+      let newUserId;
+      const conn = await db.getConnection();
+      try {
+        await conn.beginTransaction();
 
-      // ===== Insert advisor_assignments =====
-      if (advisorMajorId) {
-        await db.query(
-          `INSERT INTO advisor_assignments
-             (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Major')`,
-          [newUserId, advisorMajorId]
+        const [result] = await conn.query(
+          `INSERT INTO users
+             (msu_mail,
+              role, prefix, first_name, last_name,
+              phone, degree_level, curriculum_year, study_plan_code,
+              account_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')`,
+          [
+            mailLower, role,
+            prefix || null, first_name.trim(), last_name.trim(),
+            phone || null,
+            degree_level || null, curriculum_year || null, study_plan_code || null,
+          ]
         );
-      }
-      if (advisorCo1Id) {
-        await db.query(
-          `INSERT INTO advisor_assignments
-             (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Co_1')`,
-          [newUserId, advisorCo1Id]
-        );
+        newUserId = result.insertId;
+
+        if (advisorMajorId) {
+          await conn.query(
+            `INSERT INTO advisor_assignments
+               (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Major')`,
+            [newUserId, advisorMajorId]
+          );
+        }
+        if (advisorCo1Id) {
+          await conn.query(
+            `INSERT INTO advisor_assignments
+               (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Co_1')`,
+            [newUserId, advisorCo1Id]
+          );
+        }
+
+        await conn.commit();
+      } catch (txErr) {
+        await conn.rollback();
+        throw txErr;
+      } finally {
+        conn.release();
       }
 
       return res.status(201).json({
@@ -555,14 +568,18 @@ records = parse(req.file.buffer, {
             const newUserId = result.insertId;
 
             // ใช้ advisorMailMap ที่ fetch ไว้แล้ว ไม่ต้อง query ซ้ำ
-            if (row.role === 'Student' && row.advisor_major_mail) {
-              const majorAdvisorId = advisorMailMap[row.advisor_major_mail.toLowerCase().trim()];
-              if (majorAdvisorId) {
-                await conn.query(
-                  `INSERT INTO advisor_assignments
-                     (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Major')`,
-                  [newUserId, majorAdvisorId]
-                );
+            // เช็ค major/co1 แยกอิสระจากกัน (เหมือนตอน validate) กัน row ที่มีแค่
+            // advisor_co1_mail แต่ไม่มี advisor_major_mail ไม่ได้ insert assignment เลย
+            if (row.role === 'Student') {
+              if (row.advisor_major_mail) {
+                const majorAdvisorId = advisorMailMap[row.advisor_major_mail.toLowerCase().trim()];
+                if (majorAdvisorId) {
+                  await conn.query(
+                    `INSERT INTO advisor_assignments
+                       (student_id, advisor_id, advisor_type) VALUES (?, ?, 'Major')`,
+                    [newUserId, majorAdvisorId]
+                  );
+                }
               }
 
               if (row.advisor_co1_mail) {

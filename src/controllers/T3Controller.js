@@ -323,6 +323,9 @@ class T3Controller {
       }
 
       const result = await T3Model.advisorReview(t3Id, advisorId, action, remark || null);
+      if (!result) {
+        return res.status(409).json({ success: false, code: 'INVALID_STATE', message: 'T3 นี้ถูกเปลี่ยนสถานะไปแล้ว (เช่น นิสิตยกเลิกคำขอ) กรุณารีเฟรชหน้า' });
+      }
 
       const student    = await UserModel.findById(row.student_id);
       const journalName = row.journal_snapshot?.journal_name || '-';
@@ -418,6 +421,9 @@ class T3Controller {
       }
 
       const result = await T3Model.facultyReview(t3Id, action, meeting_no, toMysqlDate(meeting_date), remark);
+      if (!result) {
+        return res.status(409).json({ success: false, code: 'INVALID_STATE', message: 'T3 นี้ถูกเปลี่ยนสถานะไปแล้ว กรุณารีเฟรชหน้า' });
+      }
 
       const student    = await UserModel.findById(row.student_id);
       const journalName = row.journal_snapshot?.journal_name || '-';

@@ -297,6 +297,9 @@ class PreT3Controller {
       }
 
       const result = await PreT3Model.advisorReview(preT3Id, advisorId, action, remark || null);
+      if (!result) {
+        return res.status(409).json({ success: false, code: 'INVALID_STATE', message: 'Pre-T3 นี้ถูกเปลี่ยนสถานะไปแล้ว (เช่น นิสิตยกเลิกคำขอ) กรุณารีเฟรชหน้า' });
+      }
 
       // ส่งอีเมลแจ้งนิสิต / Staff ตามผล
       const student     = await UserModel.findById(row.student_id);
@@ -393,6 +396,9 @@ class PreT3Controller {
       }
 
       const result = await PreT3Model.facultyReview(preT3Id, action, meeting_no, toMysqlDate(meeting_date), remark);
+      if (!result) {
+        return res.status(409).json({ success: false, code: 'INVALID_STATE', message: 'Pre-T3 นี้ถูกเปลี่ยนสถานะไปแล้ว กรุณารีเฟรชหน้า' });
+      }
 
       // แจ้งนิสิตผลสุดท้าย
       const student     = await UserModel.findById(row.student_id);
