@@ -7,7 +7,6 @@ const authRoutes = require('./authRoutes');
 const journalRoutes = require('./journalRoutes');
 const adminRoutes = require('./adminRoutes');
 const userManageRoutes = require('./userManageRoutes');
-const { router: logRoutes } = require('./logRoutes');
 
 const router = express.Router();
 const unwantedJournalRoutes = require('./unwantedJournalRoutes');
@@ -15,8 +14,6 @@ const preT3Routes = require('./preT3Routes');
 const t3Routes = require('./t3Routes');
 const uploadRoutes = require('./uploadRoutes');
 const userRoutes = require('./userRoutes');
-// Log Console API endpoints For Dev Not System logs 
-router.use('/logs', logRoutes);
 // Health check
 router.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

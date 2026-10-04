@@ -1,10 +1,6 @@
 /**
  * Server Entry Point
  */
-// Setup console override for log viewer BEFORE importing logger
-const { setupConsoleOverride } = require('./routes/logRoutes');
-setupConsoleOverride();
-
 const app = require('./app');
 const config = require('./config');
 const logger = require('./utils/logger');

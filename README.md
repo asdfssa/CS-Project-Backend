@@ -12,13 +12,12 @@ Backend ของระบบ **Journal Watch** สำหรับตรวจ�
 - จัดการคำร้อง **Pre-T3** และ **T3** (แบบฟอร์มขอตีพิมพ์/ตรวจสอบผลงาน) พร้อม workflow อนุมัติหลายขั้น
   (นิสิต → อาจารย์ที่ปรึกษา → เจ้าหน้าที่คณะ) รวมถึงแนบไฟล์หลักฐานได้
 - ระบบผู้ใช้แบบ role-based (นิสิต, อาจารย์ที่ปรึกษา, เจ้าหน้าที่, แอดมิน, ซูเปอร์แอดมิน)
-- ระบบรายงานบั๊ก (Bug Report) จากผู้ใช้งาน
 
 ## Tech Stack
 
-- **Runtime**: Node.js 18+
+- **Runtime**: Node.js 20 (Docker image `node:20-bookworm-slim`)
 - **Framework**: Express 4
-- **Database**: MySQL 8 / MariaDB 10.11
+- **Database**: MySQL 8
 - **Authentication**: JWT (2-step: password → OTP) + Google OAuth (จำกัดโดเมน `msu.ac.th`) + Refresh token (cookie)
 - **Password**: bcrypt cost 12
 - **OTP**: SHA-256 hash, 6 หลัก, หมดอายุ 10 นาที
@@ -31,53 +30,43 @@ Backend ของระบบ **Journal Watch** สำหรับตรวจ�
 
 | Role | สิทธิ์โดยสังเขป |
 |---|---|
-| `Student` | ยื่น Pre-T3/T3, ดูประวัติของตัวเอง, แจ้งบั๊ก |
+| `Student` | ยื่น Pre-T3/T3, ดูประวัติของตัวเอง |
 | `Supervisor` (อาจารย์ที่ปรึกษา) | ตรวจ/อนุมัติคำร้องของนิสิตในความดูแล |
 | `Staff` (เจ้าหน้าที่คณะ) | อนุมัติขั้นสุดท้าย, จัดการผู้ใช้ (บางส่วน) |
-| `Admin` / `SuperAdmin` | จัดการผู้ใช้ทั้งหมด, ดู log ระบบ, จัดการแอดมิน, ดู dashboard สถิติ |
+| `Admin` / `SuperAdmin` | จัดการผู้ใช้ทั้งหมด, จัดการแอดมิน, ดู dashboard สถิติ |
 
 ## Project Structure
 
 ```
 journal-watch-backend/
-├── public/                    # Static UI สำหรับทดสอบ (index.html, log-viewer.html)
+├── db/init/                   # schema (001_schema.sql) — MySQL container รันอัตโนมัติตอนสร้าง volume ครั้งแรก
 ├── docker/
 │   └── novnc/                 # ใช้ดู browser ของ Playwright scraper แบบ headful ผ่าน noVNC
-├── docs/                      # เอกสารประกอบ (เช่น frontend-resend-otp.md)
-├── migrations/                # SQL migration แยกตามฟีเจอร์ (index, generated columns ฯลฯ)
+├── scripts/                   # seed ผู้ใช้ (seed-superadmin.js, seed-user.js) และสคริปต์ทดสอบ Scopus/TCI
+├── data/                      # ข้อมูลที่ mount เข้า container (/app/data)
+├── uploads/                   # ไฟล์แนบที่อัปโหลด (mount เข้า container)
 ├── src/
 │   ├── config/                # Config + DB connection pool
 │   ├── controllers/           # HTTP handlers (รับ req → เรียก service/model → ส่ง res)
-│   ├── middlewares/            # auth, validation, rate limit, upload, error handler
-│   ├── models/                 # Data access layer (SQL queries)
-│   ├── routes/                 # Route definitions แยกตามโมดูล
-│   ├── services/               # Business logic (auth, mail, Scopus/TCI fetch & scrape)
-│   ├── utils/                   # Helpers (logger, jwt, crypto, date, error response)
-│   ├── validators/              # Input validation rules
-│   ├── app.js                   # Express app setup (middleware, mount routes ที่ /api/v3)
-│   └── server.js                # Entry point
-├── tests/                       # Tests
-├── .env.example                 # Template ของ environment vars
+│   ├── middlewares/           # auth, validation, rate limit, upload, error handler
+│   ├── models/                # Data access layer (SQL queries)
+│   ├── routes/                # Route definitions แยกตามโมดูล
+│   ├── services/              # Business logic (auth, mail, Scopus/TCI fetch & scrape)
+│   ├── utils/                 # Helpers (logger, jwt, crypto, date, error response)
+│   ├── validators/            # Input validation rules
+│   ├── app.js                 # Express app setup (middleware, mount routes ที่ /api/v3)
+│   └── server.js              # Entry point
+├── Dockerfile
+├── docker-compose.yml         # db (MySQL 8) + backend
+├── .env.example               # Template ของ environment vars
 └── package.json
 ```
 
 ## Setup
 
-### 1. Install dependencies
-```bash
-npm install
-```
+โปรเจกต์รันผ่าน Docker Compose (MySQL 8 + backend ที่มี Playwright และ noVNC)
 
-### 2. Setup database
-รัน schema และ migration ตามลำดับให้ตรงกับฐานข้อมูลที่ใช้งานจริง (ดูไฟล์ schema/`DB_Fix_v*` แยกต่างหาก
-นอกโปรเจกต์นี้ และไฟล์ migration ใน `migrations/`) แล้วจึง insert ผู้ใช้ SuperAdmin เริ่มต้น
-
-```bash
-mysql -uroot -p journal_watch_v2 < migrations/001_performance_indexes.sql
-mysql -uroot -p journal_watch_v2 < migrations/002_pre_t3_generated_columns.sql
-```
-
-### 3. Configure environment
+### 1. Configure environment
 ```bash
 cp .env.example .env
 # แก้ค่าใน .env ให้ตรงกับ DB, JWT secret, SMTP, Google OAuth, Scopus API key ของคุณ
@@ -87,33 +76,34 @@ cp .env.example .env
 
 | ตัวแปร | คำอธิบาย |
 |---|---|
-| `PORT` | พอร์ตที่ server รัน (default 3001) |
+| `PORT` | พอร์ตที่ server รัน (ใน Docker compose ถูกตั้งเป็น 3000) |
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | การเชื่อมต่อ MySQL/MariaDB |
 | `JWT_SECRET`, `JWT_ACCESS_EXPIRES_IN`, `JWT_OTP_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_MS` | อายุ/secret ของ token แต่ละประเภท |
 | `OTP_LENGTH`, `OTP_EXPIRES_MINUTES`, `OTP_MAX_ATTEMPTS` | ค่ากำหนดของ OTP |
-| `LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES` | Account lockout |
 | `MAIL_MODE`, `MAIL_FROM`, `SMTP_*` | โหมดส่งอีเมล (`console` สำหรับ dev, `smtp` สำหรับ production) |
 | `CORS_ORIGIN` | origin ของ frontend ที่อนุญาต |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_ALLOWED_DOMAIN` | Google OAuth login (จำกัดเฉพาะโดเมนมหาวิทยาลัย) |
-| `SCOPUS_API_KEY_1` | API key สำหรับเรียก Scopus API (รองรับ rotate หลายคีย์) |
+| `SCOPUS_API_KEY_1` … `SCOPUS_API_KEY_10` | API key สำหรับเรียก Scopus API (รองรับ rotate หลายคีย์) |
 | `SCRAPER_HEADLESS` | เปิด/ปิด headless mode ของ Playwright scraper |
 
 > **สำคัญ**: อย่าใส่ค่าจริงของ secret/API key ลงใน `.env.example` — ให้ใส่เฉพาะค่า placeholder เท่านั้น
 > เพราะไฟล์นี้จะถูก commit เข้า git
 
-### 4. Run
+### 2. Run
 ```bash
-# Development (auto reload)
-npm run dev
-
-# Production
-npm start
-
-# Run tests
-npm test
+docker compose up -d --build
+docker logs -f journal_watch_backend   # ดู log ของ backend
 ```
 
-เปิดเบราว์เซอร์ที่ `http://localhost:<PORT>` เพื่อทดสอบผ่านหน้า UI ง่าย ๆ ใน `public/`
+| Service | พอร์ตบนเครื่อง host |
+|---|---|
+| backend API | `3002` (→ container `3000`) |
+| MySQL | `3310` (→ container `3306`) |
+| noVNC / VNC (bind เฉพาะ localhost) | `6082` / `5902` |
+
+`DB_HOST` และ `DB_PORT` ใน `.env` ถูก compose ทับเป็น `db:3306` ให้ backend ใน container อัตโนมัติ
+schema ใน `db/init/` จะถูกรันตอนสร้าง volume ครั้งแรกเท่านั้น จากนั้นสร้างผู้ใช้เริ่มต้นด้วย
+`scripts/seed-superadmin.js`
 
 ทุก endpoint ของ API ถูก mount ไว้ที่ prefix **`/api/v3`**
 
@@ -210,7 +200,6 @@ npm test
 | Method | Path | คำอธิบาย |
 |---|---|---|
 | GET | `/stats` | สถิติสำหรับ dashboard |
-| GET | `/logs` | System logs |
 | GET | `/admins` | รายชื่อแอดมิน |
 | POST | `/admins` | สร้างแอดมิน |
 | PATCH | `/admins/:id/suspend` | ระงับแอดมิน |
@@ -218,18 +207,18 @@ npm test
 | PATCH | `/admins/:id` | แก้ไขแอดมิน |
 | DELETE | `/admins/:id` | ลบแอดมิน |
 
-### อื่น ๆ
+### User Profile — `/api/v3/user` (ทุก role)
+
+| Method | Path | คำอธิบาย |
+|---|---|---|
+| GET | `/profile` | โปรไฟล์ของตัวเอง |
+| PATCH | `/profile` | แก้ไขโปรไฟล์ตัวเอง |
+| GET | `/staff` | รายชื่อ staff/อาจารย์ |
+
+### Health
 
 | Method | Path | คำอธิบาย | Auth |
 |---|---|---|---|
-| GET | `/api/v3/user/profile` | โปรไฟล์ของตัวเอง | ทุก role |
-| GET | `/api/v3/user/staff` | รายชื่อ staff/อาจารย์ | ทุก role |
-| PATCH | `/api/v3/user/profile` | แก้ไขโปรไฟล์ตัวเอง | ทุก role |
-| POST | `/api/v3/bug-reports` | แจ้งบั๊ก | ทุก role |
-| GET | `/api/v3/bug-reports/my` | รายการที่แจ้งเอง | ทุก role |
-| GET | `/api/v3/bug-reports` | รายการทั้งหมด | Admin/SuperAdmin |
-| PATCH | `/api/v3/bug-reports/:id/status` | อัปเดตสถานะบั๊ก | Admin/SuperAdmin |
-| GET/DELETE | `/api/v3/logs` | Log viewer สำหรับ dev (in-memory, ไม่ auth) | - |
 | GET | `/api/v3/health` | Health check | - |
 
 ## Login Flow
@@ -277,7 +266,7 @@ npm test
 
 ## Journal Lookup Flow (Scopus / TCI)
 
-1. เรียก API ทางการก่อน (`ScopusService` / `TCIService`) พร้อม cache ผลลัพธ์ไว้ในตาราง `journals_cache`
+1. เรียก API ทางการก่อน (`ScopusService` / `TCIService`)
 2. ถ้า API ล้มเหลว/ไม่มีข้อมูล จะ fallback ไปที่ web scraping ด้วย Playwright
    (`ScopusScraper` / `TCIScraper`) — ดูผ่าน noVNC ได้เมื่อรันแบบ non-headless (`SCRAPER_HEADLESS=false`)
 3. Scopus รองรับการหมุน API key หลายตัว (`ScopusProxyService`) เพื่อจัดการ rate limit รายสัปดาห์
@@ -286,7 +275,6 @@ npm test
 
 - **Password**: bcrypt cost 12 (OWASP recommended ≥ 10)
 - **OTP**: SHA-256 hashed at rest (DB leak ก็ใช้ไม่ได้)
-- **Account Lockout**: 5 ครั้งผิด → ล็อก 15 นาที
 - **OTP Lockout**: ผิด 5 ครั้ง → invalidate token
 - **Rate Limit**: จำกัดจำนวนครั้งต่อ IP แยกตาม endpoint (login, OTP, Google, forgot-password)
 - **JWT**: แยก token หลายประเภท (OTP token, access token, refresh token ผ่าน httpOnly cookie)
@@ -302,6 +290,7 @@ npm test
 - ตอน production เปลี่ยนเป็น `MAIL_MODE=smtp` พร้อมตั้งค่า SMTP credentials
 - เปลี่ยน `JWT_SECRET` เป็น random string ที่ยาว ≥ 64 ตัวอักษร
 - ห้าม commit ค่า secret จริง (API key, SMTP password, JWT secret) ลงใน `.env.example` หรือไฟล์ใด ๆ ที่เข้า git
+- ดู log ด้วย `docker logs -f journal_watch_backend` (ไม่มี log viewer ผ่าน API)
 - `docker/novnc/` ใช้สำหรับดูการทำงานของ Playwright scraper แบบ remote desktop เวลา debug
 
 ## License
