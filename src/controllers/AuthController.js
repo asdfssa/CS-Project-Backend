@@ -13,7 +13,7 @@ const REFRESH_COOKIE_OPTIONS = {
   secure: process.env.NODE_ENV === 'production', // HTTPS only ใน production
   sameSite: 'strict',      // ป้องกัน CSRF
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 วัน (ms)
-  path: '/api/auth',       // ส่ง cookie เฉพาะ /api/auth routes
+  path: '/api/v3/auth', // ส่ง cookie เฉพาะ /api/v3/auth routes
 };
 
 class AuthController {
@@ -146,7 +146,7 @@ class AuthController {
       });
     } catch (err) {
       // clear cookie ถ้า refresh token ไม่ valid
-      res.clearCookie('jw_refresh_token', { path: '/api/auth' });
+      res.clearCookie('jw_refresh_token', { path: '/api/v3/auth' });
       next(err);
     }
   }
@@ -210,7 +210,7 @@ static async me(req, res, next) {
       const refreshToken = req.cookies?.jw_refresh_token;
       await AuthService.logout({ refreshToken });
 
-      res.clearCookie('jw_refresh_token', { path: '/api/auth' });
+      res.clearCookie('jw_refresh_token', { path: '/api/v3/auth' });
 
       return res.json({
         success: true,
@@ -261,7 +261,7 @@ static async me(req, res, next) {
       });
 
       // Clear refresh token cookie ถ้ามี (บังคับ logout session ปัจจุบันด้วย)
-      res.clearCookie('jw_refresh_token', { path: '/api/auth' });
+      res.clearCookie('jw_refresh_token', { path: '/api/v3/auth' });
 
       return res.json({
         success: true,

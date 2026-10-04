@@ -99,7 +99,7 @@ docker logs -f journal_watch_backend   # ดู log ของ backend
 |---|---|
 | backend API | `3002` (→ container `3000`) |
 | MySQL | `3310` (→ container `3306`) |
-| noVNC / VNC (bind เฉพาะ localhost) | `6082` / `5902` |
+| noVNC / VNC (bind เฉพาะ localhost) | `6082` / `15902` |
 
 `DB_HOST` และ `DB_PORT` ใน `.env` ถูก compose ทับเป็น `db:3306` ให้ backend ใน container อัตโนมัติ
 schema ใน `db/init/` จะถูกรันตอนสร้าง volume ครั้งแรกเท่านั้น จากนั้นสร้างผู้ใช้เริ่มต้นด้วย
