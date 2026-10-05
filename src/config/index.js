@@ -51,7 +51,8 @@ module.exports = {
   },
 
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    // รับได้หลาย origin คั่นด้วย , (frontend ที่เสิร์ฟจาก container เดียวกันเป็น same-origin ไม่ต้องใส่)
+    origin: (process.env.CORS_ORIGIN || 'http://localhost:4200').split(',').map(o => o.trim()),
   },
     google: {
     clientId: process.env.GOOGLE_CLIENT_ID,

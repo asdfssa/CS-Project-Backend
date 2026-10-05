@@ -57,7 +57,7 @@ journal-watch-backend/
 │   ├── app.js                 # Express app setup (middleware, mount routes ที่ /api/v3)
 │   └── server.js              # Entry point
 ├── Dockerfile
-├── docker-compose.yml         # db (MySQL 8) + backend
+(docker-compose.yml อยู่ที่ root ของ Pro2: db + backend/frontend + cloudflared)
 ├── .env.example               # Template ของ environment vars
 └── package.json
 ```
@@ -91,13 +91,13 @@ cp .env.example .env
 
 ### 2. Run
 ```bash
-docker compose up -d --build
+docker compose up -d --build        # รันที่ root ของ Pro2 (ไม่ใช่ใน backend/)
 docker logs -f journal_watch_backend   # ดู log ของ backend
 ```
 
 | Service | พอร์ตบนเครื่อง host |
 |---|---|
-| backend API | `3002` (→ container `3000`) |
+| backend API | `13002` (3002 ติด Windows reserved port range) (→ container `3000`) |
 | MySQL | `3310` (→ container `3306`) |
 | noVNC / VNC (bind เฉพาะ localhost) | `6082` / `15902` |
 

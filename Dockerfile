@@ -1,4 +1,16 @@
-# Journal Watch backend — Node + Playwright (chromium) + noVNC debug stack
+# Journal Watch — Angular frontend + Node backend + Playwright (chromium) + noVNC debug stack
+
+# ── Stage 1: build Angular (context "frontend" มาจาก additional_contexts ใน docker-compose.yml)
+FROM node:20-alpine AS frontend-build
+WORKDIR /fe
+COPY --from=frontend package.json package-lock.json ./
+RUN npm ci
+COPY --from=frontend angular.json tsconfig.json tsconfig.app.json ./
+COPY --from=frontend src ./src
+COPY --from=frontend public ./public
+RUN npm run build
+
+# ── Stage 2: backend (เสิร์ฟ frontend จาก /app/frontend ด้วย Express)
 FROM node:20-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,6 +27,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npx playwright install --with-deps chromium
 
 COPY . .
+COPY --from=frontend-build /fe/dist/journal/browser ./frontend
 RUN chmod +x docker/novnc/startup.sh
 
 EXPOSE 3000 5900 6080
